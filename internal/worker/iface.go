@@ -16,3 +16,10 @@ type lokDocument interface {
 	GetParts() int
 	Close() error
 }
+
+// htmlToMarkdown is the seam used by runMarkdown so we can unit-test the
+// worker without depending on the mdconv package. The real wiring lives in
+// pool.go (a later task).
+type htmlToMarkdown interface {
+	Convert(html []byte, images MarkdownImageMode) ([]byte, error)
+}

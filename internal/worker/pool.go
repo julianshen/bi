@@ -16,6 +16,7 @@ type Pool struct {
 	closeMu  sync.Mutex
 	closed   bool
 	closeErr error
+	md       htmlToMarkdown // nil by default; set in production via mdAdapter (Task 17)
 }
 
 type jobEnvelope struct {
@@ -104,6 +105,9 @@ func (p *Pool) Close() error {
 	p.closeErr = p.office.Close()
 	return p.closeErr
 }
+
+// setMarkdown is a test helper for injecting an htmlToMarkdown.
+func (p *Pool) setMarkdown(md htmlToMarkdown) { p.md = md }
 
 // Run submits a job and waits for the outcome. It honours ctx for both queue
 // wait and the in-flight conversion. ctx.Err() takes precedence over the

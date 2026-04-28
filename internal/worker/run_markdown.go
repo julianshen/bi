@@ -1,7 +1,58 @@
 package worker
 
-import "context"
+import (
+	"context"
+	"errors"
+	"fmt"
+	"os"
+)
 
 func (p *Pool) runMarkdown(ctx context.Context, job Job) (Result, error) {
-	return Result{}, errNotImplemented
+	if err := ctx.Err(); err != nil {
+		return Result{}, err
+	}
+	if p.md == nil {
+		return Result{}, errors.New("worker: markdown converter not wired")
+	}
+	doc, err := p.office.Load(job.InPath, job.Password)
+	if err != nil {
+		return Result{}, Classify(err)
+	}
+	defer doc.Close()
+
+	htmlFile, err := os.CreateTemp("", "bi-*.html")
+	if err != nil {
+		return Result{}, fmt.Errorf("worker: create html temp: %w", err)
+	}
+	htmlPath := htmlFile.Name()
+	htmlFile.Close()
+	defer os.Remove(htmlPath)
+
+	if err := doc.SaveAs(htmlPath, "html", ""); err != nil {
+		return Result{}, Classify(err)
+	}
+	htmlBytes, err := os.ReadFile(htmlPath)
+	if err != nil {
+		return Result{}, fmt.Errorf("worker: read html: %w", err)
+	}
+	mdBytes, err := p.md.Convert(htmlBytes, job.MarkdownImages)
+	if err != nil {
+		return Result{}, fmt.Errorf("%w: %v", ErrMarkdownConversion, err)
+	}
+
+	out, err := os.CreateTemp("", "bi-*.md")
+	if err != nil {
+		return Result{}, fmt.Errorf("worker: create md temp: %w", err)
+	}
+	outPath := out.Name()
+	if _, err := out.Write(mdBytes); err != nil {
+		out.Close()
+		_ = os.Remove(outPath)
+		return Result{}, fmt.Errorf("worker: write md: %w", err)
+	}
+	if err := out.Close(); err != nil {
+		_ = os.Remove(outPath)
+		return Result{}, fmt.Errorf("worker: close md: %w", err)
+	}
+	return Result{OutPath: outPath, MIME: "text/markdown"}, nil
 }
