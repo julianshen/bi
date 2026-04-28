@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/julianshen/bi/internal/worker"
@@ -14,9 +15,13 @@ type Deps struct {
 	Logger         *slog.Logger
 	APIToken       string
 	MaxUploadBytes int64
+	ReadyzTTL      time.Duration
 }
 
-type Server struct{ deps Deps }
+type Server struct {
+	deps    Deps
+	readyzC readyzCache
+}
 
 func New(deps Deps) *Server {
 	if deps.Logger == nil {
@@ -25,7 +30,10 @@ func New(deps Deps) *Server {
 	if deps.MaxUploadBytes == 0 {
 		deps.MaxUploadBytes = 100 * 1024 * 1024
 	}
-	return &Server{deps: deps}
+	if deps.ReadyzTTL == 0 {
+		deps.ReadyzTTL = 5 * time.Second
+	}
+	return &Server{deps: deps, readyzC: readyzCache{ttl: deps.ReadyzTTL}}
 }
 
 func (s *Server) Routes() http.Handler {
@@ -36,6 +44,7 @@ func (s *Server) Routes() http.Handler {
 
 	// Public
 	r.Get("/healthz", s.healthz)
+	r.Get("/readyz", s.readyz)
 
 	// Auth-gated conversion routes
 	r.Group(func(r chi.Router) {
