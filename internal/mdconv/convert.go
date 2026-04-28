@@ -23,6 +23,7 @@ func Convert(html []byte, opts Options) ([]byte, error) {
 
 // ConvertWithBase resolves relative image references against base.
 func ConvertWithBase(html []byte, opts Options, base string) ([]byte, error) {
+	html = scrubLONoise(html)
 	md, err := defaultConv.ConvertString(string(html))
 	if err != nil {
 		return nil, err
