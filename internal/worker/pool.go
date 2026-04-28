@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+
+	mdconvpkg "github.com/julianshen/bi/internal/mdconv"
 )
 
 // Pool is the production Converter.
@@ -37,7 +39,13 @@ func New(cfg Config) (*Pool, error) {
 	if err != nil {
 		return nil, fmt.Errorf("worker: init lok: %w", err)
 	}
-	return newWithOffice(cfg, office)
+	p, err := newWithOffice(cfg, office)
+	if err != nil {
+		_ = office.Close()
+		return nil, err
+	}
+	p.md = mdAdapter{}
+	return p, nil
 }
 
 func newWithOffice(cfg Config, office lokOffice) (*Pool, error) {
@@ -108,6 +116,21 @@ func (p *Pool) Close() error {
 
 // setMarkdown is a test helper for injecting an htmlToMarkdown.
 func (p *Pool) setMarkdown(md htmlToMarkdown) { p.md = md }
+
+// mdAdapter satisfies the worker's htmlToMarkdown seam by delegating to
+// the internal/mdconv package.
+type mdAdapter struct{}
+
+func (mdAdapter) Convert(html []byte, mode MarkdownImageMode) ([]byte, error) {
+	var m mdconvpkg.ImageMode
+	switch mode {
+	case MarkdownImagesDrop:
+		m = mdconvpkg.ImagesDrop
+	default:
+		m = mdconvpkg.ImagesEmbed
+	}
+	return mdconvpkg.Convert(html, mdconvpkg.Options{Images: m})
+}
 
 // Run submits a job and waits for the outcome. It honours ctx for both queue
 // wait and the in-flight conversion. ctx.Err() takes precedence over the
