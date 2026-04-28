@@ -60,5 +60,5 @@ func (f *fakeDocument) RenderPagePNG(page int, dpi float64) ([]byte, error) {
 	}
 	return []byte("fake-png"), nil
 }
-func (f *fakeDocument) GetParts() int { return f.parts }
+func (f *fakeDocument) GetParts() (int, error) { return f.parts, nil }
 func (f *fakeDocument) Close() error  { f.closeCalls++; return nil }

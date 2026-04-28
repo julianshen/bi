@@ -23,13 +23,18 @@ func (p *Pool) runPDF(ctx context.Context, job Job) (Result, error) {
 	outPath := out.Name()
 	out.Close()
 
+	parts, perr := doc.GetParts()
+	if perr != nil {
+		_ = os.Remove(outPath)
+		return Result{}, Classify(perr)
+	}
 	if err := doc.SaveAs(outPath, "pdf", ""); err != nil {
 		_ = os.Remove(outPath)
 		return Result{}, Classify(err)
 	}
 	return Result{
 		OutPath:    outPath,
-		TotalPages: doc.GetParts(),
+		TotalPages: parts,
 		MIME:       "application/pdf",
 	}, nil
 }

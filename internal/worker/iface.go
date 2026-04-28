@@ -13,7 +13,7 @@ type lokDocument interface {
 	SaveAs(path, filter, options string) error
 	InitializeForRendering(arg string) error
 	RenderPagePNG(page int, dpi float64) ([]byte, error)
-	GetParts() int
+	GetParts() (int, error)
 	Close() error
 }
 

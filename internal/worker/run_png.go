@@ -24,7 +24,10 @@ func (p *Pool) runPNG(ctx context.Context, job Job) (Result, error) {
 	}
 	defer doc.Close()
 
-	parts := doc.GetParts()
+	parts, perr := doc.GetParts()
+	if perr != nil {
+		return Result{}, Classify(perr)
+	}
 	if job.Page < 0 || job.Page >= parts {
 		return Result{}, ErrPageOutOfRange
 	}
