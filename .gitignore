@@ -1,0 +1,19 @@
+# Binaries
+/bin/
+/out/
+/bi
+
+# Test / coverage artefacts
+coverage.out
+coverage.html
+*.test
+*.prof
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store
+
+# Go workspace
+go.work
+go.work.sum

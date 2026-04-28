@@ -1,0 +1,11 @@
+.git
+.github
+*.md
+!CLAUDE.md
+coverage.out
+coverage.html
+bin/
+out/
+testdata/large/
+.idea
+.vscode
