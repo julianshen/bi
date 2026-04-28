@@ -42,6 +42,9 @@ func (s *Server) Routes() http.Handler {
 		r.Use(Auth(s.deps.APIToken))
 		r.Use(MaxBytes(s.deps.MaxUploadBytes))
 		r.Post("/v1/convert/pdf", s.convertPDF)
+		r.Post("/v1/convert/png", s.convertPNG)
+		r.Post("/v1/convert/markdown", s.convertMarkdown)
+		r.Post("/v1/thumbnail", s.thumbnail)
 	})
 
 	return r

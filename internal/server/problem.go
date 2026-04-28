@@ -51,10 +51,17 @@ func mapError(err error) problemMapping {
 		return problemMapping{"payload-too-large", "Payload too large", http.StatusRequestEntityTooLarge}
 	case errors.Is(err, context.DeadlineExceeded):
 		return problemMapping{"timeout", "Conversion timed out", http.StatusGatewayTimeout}
+	case errors.As(err, new(ErrBadQuery)):
+		return problemMapping{"bad-request", "Bad query parameter", http.StatusBadRequest}
 	default:
 		return problemMapping{"internal", "Internal server error", http.StatusInternalServerError}
 	}
 }
+
+// ErrBadQuery surfaces invalid query parameters.
+type ErrBadQuery struct{ Param, Value string }
+
+func (e ErrBadQuery) Error() string { return "bad query " + e.Param + "=" + e.Value }
 
 // WriteProblem renders an RFC 7807 response.
 func WriteProblem(w http.ResponseWriter, instance, requestID string, err error) {
