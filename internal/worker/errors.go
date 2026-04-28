@@ -54,3 +54,5 @@ func Classify(err error) error {
 	}
 	return err
 }
+
+var errNotImplemented = errors.New("worker: not implemented")

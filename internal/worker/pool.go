@@ -1,0 +1,106 @@
+package worker
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"sync"
+)
+
+// Pool is the production Converter.
+type Pool struct {
+	cfg      Config
+	office   lokOffice
+	queue    chan jobEnvelope
+	workers  sync.WaitGroup
+	closeMu  sync.Mutex
+	closed   bool
+	closeErr error
+}
+
+type jobEnvelope struct {
+	ctx    context.Context
+	job    Job
+	result chan<- runOutcome
+}
+
+type runOutcome struct {
+	res Result
+	err error
+}
+
+// New initialises lok and returns a ready Pool. It returns an error if lok is
+// already initialised in this process (LOK enforces one init per process).
+func New(cfg Config) (*Pool, error) {
+	office, err := newRealOffice(cfg.LOKPath)
+	if err != nil {
+		return nil, fmt.Errorf("worker: init lok: %w", err)
+	}
+	return newWithOffice(cfg, office)
+}
+
+func newWithOffice(cfg Config, office lokOffice) (*Pool, error) {
+	if cfg.Workers <= 0 {
+		return nil, errors.New("worker: Workers must be > 0")
+	}
+	if cfg.QueueDepth <= 0 {
+		return nil, errors.New("worker: QueueDepth must be > 0")
+	}
+	if cfg.ConvertTimeout <= 0 {
+		return nil, errors.New("worker: ConvertTimeout must be > 0")
+	}
+	p := &Pool{
+		cfg:    cfg,
+		office: office,
+		queue:  make(chan jobEnvelope, cfg.QueueDepth),
+	}
+	for i := 0; i < cfg.Workers; i++ {
+		p.workers.Add(1)
+		go p.runWorker()
+	}
+	return p, nil
+}
+
+func (p *Pool) runWorker() {
+	defer p.workers.Done()
+	for env := range p.queue {
+		res, err := p.execute(env.ctx, env.job)
+		select {
+		case env.result <- runOutcome{res, err}:
+		case <-env.ctx.Done():
+			if res.OutPath != "" {
+				_ = removeQuiet(res.OutPath)
+			}
+		}
+	}
+}
+
+// execute is the per-format dispatcher. Implementations live in run_*.go.
+func (p *Pool) execute(ctx context.Context, job Job) (Result, error) {
+	switch job.Format {
+	case FormatPDF:
+		return p.runPDF(ctx, job)
+	case FormatPNG:
+		return p.runPNG(ctx, job)
+	case FormatMarkdown:
+		return p.runMarkdown(ctx, job)
+	default:
+		return Result{}, fmt.Errorf("worker: unknown format %d", job.Format)
+	}
+}
+
+// Close stops accepting jobs, waits for in-flight work, then closes the
+// underlying lok.Office. Idempotent.
+func (p *Pool) Close() error {
+	p.closeMu.Lock()
+	if p.closed {
+		p.closeMu.Unlock()
+		return p.closeErr
+	}
+	p.closed = true
+	close(p.queue)
+	p.closeMu.Unlock()
+	p.workers.Wait()
+	p.closeErr = p.office.Close()
+	return p.closeErr
+}
