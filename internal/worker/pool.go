@@ -104,3 +104,27 @@ func (p *Pool) Close() error {
 	p.closeErr = p.office.Close()
 	return p.closeErr
 }
+
+// Run submits a job and waits for the outcome. It honours ctx for both queue
+// wait and the in-flight conversion. ctx.Err() takes precedence over the
+// outcome on cancellation/timeout.
+func (p *Pool) Run(ctx context.Context, job Job) (Result, error) {
+	timeoutCtx, cancel := context.WithTimeout(ctx, p.cfg.ConvertTimeout)
+	defer cancel()
+
+	out := make(chan runOutcome, 1)
+	env := jobEnvelope{ctx: timeoutCtx, job: job, result: out}
+
+	select {
+	case p.queue <- env:
+	default:
+		return Result{}, ErrQueueFull
+	}
+
+	select {
+	case res := <-out:
+		return res.res, res.err
+	case <-timeoutCtx.Done():
+		return Result{}, timeoutCtx.Err()
+	}
+}
