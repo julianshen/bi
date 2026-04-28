@@ -10,7 +10,7 @@ import (
 )
 
 func TestConvertGolden(t *testing.T) {
-	cases := []string{"paragraph", "headings"}
+	cases := []string{"paragraph", "headings", "table"}
 	for _, name := range cases {
 		t.Run(name, func(t *testing.T) {
 			html := mustRead(t, filepath.Join("testdata", name+".html"))
