@@ -48,7 +48,7 @@ func (m MarkdownImageMode) String() string {
 
 // Job is a single conversion request, fully self-described.
 type Job struct {
-	InPath         string            // path to a temp file already on disk
+	InPath         string // path to a temp file already on disk
 	Format         Format
 	Page           int               // 0-based; PNG only
 	DPI            float64           // PNG only

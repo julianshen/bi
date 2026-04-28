@@ -18,7 +18,10 @@ func TestPNGHandlerHappyPath(t *testing.T) {
 
 	req, _ := http.NewRequest("POST", srv.URL+"/v1/convert/png?page=4&dpi=1.5", strings.NewReader("x"))
 	req.Header.Set("Content-Type", "application/x-test")
-	resp, _ := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
 		t.Errorf("status = %d", resp.StatusCode)
@@ -53,7 +56,10 @@ func TestPNGHandlerRejectsBadParams(t *testing.T) {
 
 	req, _ := http.NewRequest("POST", srv.URL+"/v1/convert/png?page=abc", strings.NewReader("x"))
 	req.Header.Set("Content-Type", "application/x-test")
-	resp, _ := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 400 {
 		t.Errorf("status = %d, want 400", resp.StatusCode)

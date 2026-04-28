@@ -29,13 +29,13 @@ func (f *fakeOffice) Load(path, password string) (lokDocument, error) {
 func (f *fakeOffice) Close() error { f.closeCalls++; return f.closeErr }
 
 type fakeDocument struct {
-	parts        int
-	saveAsCalls  []saveAsCall
-	saveAsErr    error
-	saveAsHook   func(path, filter, options string) error // optional, runs after recording
-	renderErr    error
-	renderBytes  []byte
-	closeCalls   int
+	parts       int
+	saveAsCalls []saveAsCall
+	saveAsErr   error
+	saveAsHook  func(path, filter, options string) error // optional, runs after recording
+	renderErr   error
+	renderBytes []byte
+	closeCalls  int
 }
 
 type saveAsCall struct{ Path, Filter, Options string }
@@ -61,4 +61,4 @@ func (f *fakeDocument) RenderPagePNG(page int, dpi float64) ([]byte, error) {
 	return []byte("fake-png"), nil
 }
 func (f *fakeDocument) GetParts() (int, error) { return f.parts, nil }
-func (f *fakeDocument) Close() error  { f.closeCalls++; return nil }
+func (f *fakeDocument) Close() error           { f.closeCalls++; return nil }

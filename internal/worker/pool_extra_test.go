@@ -24,7 +24,7 @@ func (f *fakeDocInitErr) InitializeForRendering(arg string) error {
 type officeReturning struct{ doc lokDocument }
 
 func (o officeReturning) Load(string, string) (lokDocument, error) { return o.doc, nil }
-func (o officeReturning) Close() error                              { return nil }
+func (o officeReturning) Close() error                             { return nil }
 
 func TestNewSurfacesNewRealOfficeError(t *testing.T) {
 	// Production New() calls newRealOffice which is a stub returning an error

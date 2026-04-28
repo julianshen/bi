@@ -51,7 +51,10 @@ func TestPDFHandlerRejectsEmptyContentType(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	req, _ := http.NewRequest("POST", srv.URL+"/v1/convert/pdf", strings.NewReader("x"))
-	resp, _ := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 415 {
 		t.Errorf("status = %d, want 415", resp.StatusCode)

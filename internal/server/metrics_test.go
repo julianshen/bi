@@ -18,7 +18,10 @@ func TestMetricsEndpointReturnsExposition(t *testing.T) {
 	// Trigger a healthz hit so we have something in counters.
 	_, _ = http.Get(srv.URL + "/healthz")
 
-	resp, _ := http.Get(srv.URL + "/metrics")
+	resp, err := http.Get(srv.URL + "/metrics")
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
 		t.Errorf("status = %d", resp.StatusCode)

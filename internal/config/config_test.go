@@ -72,9 +72,9 @@ func TestLoadEnvOverrides(t *testing.T) {
 
 func TestLoadInvalidEnv(t *testing.T) {
 	cases := map[string]map[string]string{
-		"workers nan":      {"BI_WORKERS": "abc"},
-		"timeout no unit":  {"BI_CONVERT_TIMEOUT": "30"},
-		"size negative":    {"BI_MAX_UPLOAD_BYTES": "-1"},
+		"workers nan":     {"BI_WORKERS": "abc"},
+		"timeout no unit": {"BI_CONVERT_TIMEOUT": "30"},
+		"size negative":   {"BI_MAX_UPLOAD_BYTES": "-1"},
 	}
 	for name, env := range cases {
 		t.Run(name, func(t *testing.T) {

@@ -16,7 +16,10 @@ func TestReadyzReturns200OnHealthyConverter(t *testing.T) {
 	srv := httptest.NewServer(h.Routes())
 	t.Cleanup(srv.Close)
 
-	resp, _ := http.Get(srv.URL + "/readyz")
+	resp, err := http.Get(srv.URL + "/readyz")
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
 		t.Errorf("status = %d", resp.StatusCode)
@@ -29,7 +32,10 @@ func TestReadyzReturns503OnConverterErr(t *testing.T) {
 	srv := httptest.NewServer(h.Routes())
 	t.Cleanup(srv.Close)
 
-	resp, _ := http.Get(srv.URL + "/readyz")
+	resp, err := http.Get(srv.URL + "/readyz")
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 503 {
 		t.Errorf("status = %d", resp.StatusCode)
