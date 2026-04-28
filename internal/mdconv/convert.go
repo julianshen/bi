@@ -10,5 +10,5 @@ func Convert(html []byte, opts Options) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return []byte(md), nil
+	return normaliseHeadings([]byte(md)), nil
 }
