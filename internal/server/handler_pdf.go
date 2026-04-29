@@ -64,13 +64,16 @@ func (s *Server) handleConversion(w http.ResponseWriter, r *http.Request, job wo
 	}
 	defer f.Close()
 
+	info, err := f.Stat()
+	if err != nil {
+		WriteProblem(w, r.URL.Path, RequestIDFrom(r.Context()), err)
+		return
+	}
 	w.Header().Set("Content-Type", res.MIME)
 	if res.TotalPages > 0 {
 		w.Header().Set("X-Total-Pages", strconv.Itoa(res.TotalPages))
 	}
-	if info, err := f.Stat(); err == nil {
-		w.Header().Set("Content-Length", strconv.FormatInt(info.Size(), 10))
-	}
+	w.Header().Set("Content-Length", strconv.FormatInt(info.Size(), 10))
 	w.WriteHeader(http.StatusOK)
 	_, _ = io.Copy(w, f)
 }

@@ -32,10 +32,14 @@ type runOutcome struct {
 	err error
 }
 
+// newOffice is the office-constructor seam: production wires
+// newRealOffice (cgo); tests can swap a stub via tests in this package.
+var newOffice = func(path string) (lokOffice, error) { return newRealOffice(path) }
+
 // New initialises lok and returns a ready Pool. It returns an error if lok is
 // already initialised in this process (LOK enforces one init per process).
 func New(cfg Config) (*Pool, error) {
-	office, err := newRealOffice(cfg.LOKPath)
+	office, err := newOffice(cfg.LOKPath)
 	if err != nil {
 		return nil, fmt.Errorf("worker: init lok: %w", err)
 	}

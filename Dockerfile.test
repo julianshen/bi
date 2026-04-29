@@ -22,13 +22,15 @@ ENV CGO_ENABLED=1 \
 # The integration tests load LO too, so without this they would crash on the
 # first preempt that lands while LO C code is on stack.
 
+# Only writer + calc are exercised by the integration tests against
+# real LO. impress / draw aren't loaded by any test target, so we omit
+# them to keep the image small and the build fast. Production runtime
+# (Dockerfile) installs all four because real users upload pptx/odp/odg.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
         libreoffice-core \
         libreoffice-writer \
         libreoffice-calc \
-        libreoffice-impress \
-        libreoffice-draw \
         ca-certificates \
         fonts-liberation \
         fonts-dejavu-core \
@@ -41,8 +43,10 @@ RUN go mod download
 
 COPY . .
 
-# `-tags=integration` already covers the unit tests (Go build tags are
-# additive, not exclusive), so a single test invocation runs the full set.
+# `-tags=integration` covers the unit tests too (Go build tags are
+# additive, not exclusive). cover-gate runs separately because it
+# uses `-tags=nolok` to swap the cgo adapter for a stub — the
+# resulting profile is incompatible with the integration build.
 RUN go vet ./... \
  && gofmt -s -l . | (! grep .) \
  && go test -tags=integration -race ./... \
