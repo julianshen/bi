@@ -9,15 +9,16 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
-	"go.opentelemetry.io/otel/trace"
 )
 
-// InitTracing wires an OTLP/gRPC exporter using standard OTEL_* env. Returns a
-// Tracer for spans we create explicitly and a shutdown func to call at exit.
-func InitTracing(ctx context.Context, serviceName string) (trace.Tracer, func(context.Context) error, error) {
+// InitTracing wires an OTLP/gRPC exporter using standard OTEL_* env and
+// returns a shutdown func to call at exit. Per-request spans come from
+// otelhttp middleware automatically — explicit Tracer wiring will land
+// when the worker introduces queue.wait / lok.* spans.
+func InitTracing(ctx context.Context, serviceName string) (func(context.Context) error, error) {
 	exp, err := otlptracegrpc.New(ctx)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	res, _ := resource.New(ctx,
 		resource.WithAttributes(semconv.ServiceName(serviceName)),
@@ -27,7 +28,7 @@ func InitTracing(ctx context.Context, serviceName string) (trace.Tracer, func(co
 		sdktrace.WithBatcher(exp),
 		sdktrace.WithResource(res),
 	)
-	return tp.Tracer("bi"), tp.Shutdown, nil
+	return tp.Shutdown, nil
 }
 
 // otelMiddleware wraps a handler so each request gets an http.server.request

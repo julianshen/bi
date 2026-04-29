@@ -48,13 +48,12 @@ func runServe(_ []string) {
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	tracer, shutdownTracer, terr := server.InitTracing(ctx, "bi")
+	shutdownTracer, terr := server.InitTracing(ctx, "bi")
 	if terr != nil {
 		logger.Warn("tracing disabled", "err", terr)
 	} else {
 		defer shutdownTracer(context.Background())
 	}
-	_ = tracer // reserved for explicit spans in future tasks
 
 	srv := &http.Server{
 		Addr: cfg.ListenAddr,

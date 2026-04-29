@@ -18,7 +18,7 @@ func TestInitTracingHandlesNoEndpoint(t *testing.T) {
 	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:1") // unreachable
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
-	_, shutdown, err := server.InitTracing(ctx, "bi-test")
+	shutdown, err := server.InitTracing(ctx, "bi-test")
 	// Both outcomes are acceptable: returns err, or returns OK and shutdown
 	// finishes within the deadline. Just confirm it doesn't panic.
 	if err == nil && shutdown != nil {
