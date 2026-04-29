@@ -27,8 +27,8 @@ func (o officeReturning) Load(string, string) (lokDocument, error) { return o.do
 func (o officeReturning) Close() error                             { return nil }
 
 func TestNewSurfacesNewRealOfficeError(t *testing.T) {
-	// Production New() calls newRealOffice which is a stub returning an error
-	// until Task 32 wires the real adapter. The error must propagate.
+	// In nolok build, newRealOffice returns an error stub; New must
+	// propagate it instead of returning a partially-initialised Pool.
 	_, err := New(Config{LOKPath: "/nope", Workers: 1, QueueDepth: 1, ConvertTimeout: time.Second})
 	if err == nil {
 		t.Fatal("New: want error, got nil")

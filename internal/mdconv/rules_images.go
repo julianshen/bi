@@ -72,6 +72,11 @@ func isDataURI(s string) bool { return strings.HasPrefix(s, "data:") }
 // from disclosing arbitrary host files in the rendered Markdown. Absolute
 // paths are also rejected because LO HTML export should never emit them
 // for embedded images.
+//
+// Lexical-only — symlinks are NOT followed. The threat model assumes LO's
+// per-job temp directory contains no attacker-controlled symlinks (LO
+// creates the dir fresh and emits its own image filenames). If that
+// invariant changes, harden with filepath.EvalSymlinks before ReadFile.
 func resolveImageSrc(resolveDir, src string) (string, bool) {
 	if filepath.IsAbs(src) {
 		return "", false

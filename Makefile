@@ -41,7 +41,7 @@ cover:
 # installed.
 cover-gate:
 	@fail=0; \
-	for entry in config:90 mdconv:90 server:90 worker:80; do \
+	for entry in config:90 mdconv:90 server:90 worker:85; do \
 	    pkg=$${entry%:*}; min=$${entry#*:}; \
 	    out=$$( $(GO) test -tags=nolok -covermode=atomic -coverpkg=./internal/$$pkg/ ./internal/$$pkg/ 2>&1 | tail -1 ); \
 	    pct=$$( echo "$$out" | awk '{for(i=1;i<=NF;i++) if($$i=="coverage:") print $$(i+1)}' | tr -d '%' ); \

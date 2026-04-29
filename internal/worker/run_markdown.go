@@ -40,7 +40,7 @@ func (p *Pool) runMarkdown(ctx context.Context, job Job) (Result, error) {
 	}
 	mdBytes, err := p.md.Convert(htmlBytes, job.MarkdownImages, filepath.Dir(htmlPath))
 	if err != nil {
-		return Result{}, fmt.Errorf("%w: %v", ErrMarkdownConversion, err)
+		return Result{}, fmt.Errorf("%w: %w", ErrMarkdownConversion, err)
 	}
 
 	out, err := os.CreateTemp("", "bi-*.md")

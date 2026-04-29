@@ -376,7 +376,7 @@ Multi-stage `Dockerfile` (already scaffolded):
 | `internal/config`                        | unit      | no          | none            | 100% (current)  |
 | `internal/mdconv`                        | unit (table-driven on canned HTML) | no | none | ≥95% |
 | `internal/server`                        | unit (with `fakeConverter`) | no | none | ≥90% |
-| `internal/worker` (Go logic)             | unit (with `fakeOffice`) | no | none | ≥80% |
+| `internal/worker` (Go logic)             | unit (with `fakeOffice`) | no | none | ≥85% |
 | `internal/worker` (real LO smoke)        | integration | **yes** | `//go:build integration` | excluded from gate |
 | `cmd/bi serve`                           | smoke (boots, `/healthz` 200) | no | none | ≥80% |
 | `cmd/bi healthcheck`                     | unit (against fake server) | no | none | ≥90% |

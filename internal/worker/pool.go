@@ -99,16 +99,17 @@ func (p *Pool) execute(ctx context.Context, job Job) (Result, error) {
 }
 
 // Close stops accepting jobs, waits for in-flight work, then closes the
-// underlying lok.Office. Idempotent.
+// underlying lok.Office. Idempotent. The lock is held across the entire
+// shutdown so a racing second caller observes the fully-populated
+// closeErr instead of the zero value.
 func (p *Pool) Close() error {
 	p.closeMu.Lock()
+	defer p.closeMu.Unlock()
 	if p.closed {
-		p.closeMu.Unlock()
 		return p.closeErr
 	}
 	p.closed = true
 	close(p.queue)
-	p.closeMu.Unlock()
 	p.workers.Wait()
 	p.closeErr = p.office.Close()
 	return p.closeErr
