@@ -26,9 +26,9 @@ type officeReturning struct{ doc lokDocument }
 func (o officeReturning) Load(string, string) (lokDocument, error) { return o.doc, nil }
 func (o officeReturning) Close() error                             { return nil }
 
-// TestNewClosesOfficeOnNewWithOfficeError covers the happy-path branch of
-// New that runs after newOffice succeeds but before newWithOffice does — so
-// the office must be closed on cfg validation failure.
+// TestNewClosesOfficeOnNewWithOfficeError pins that when newOffice succeeds
+// but newWithOffice rejects the cfg, New closes the already-opened office to
+// avoid leaking it on the early return.
 func TestNewClosesOfficeOnNewWithOfficeError(t *testing.T) {
 	office := &fakeOffice{}
 	prev := newOffice

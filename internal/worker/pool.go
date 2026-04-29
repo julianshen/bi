@@ -34,6 +34,9 @@ type runOutcome struct {
 
 // newOffice is the office-constructor seam: production wires
 // newRealOffice (cgo); tests can swap a stub via tests in this package.
+//
+// Not safe with t.Parallel(): tests that swap newOffice run sequentially.
+// If parallelisation is ever needed, lift this to a *Pool field instead.
 var newOffice = func(path string) (lokOffice, error) { return newRealOffice(path) }
 
 // New initialises lok and returns a ready Pool. It returns an error if lok is

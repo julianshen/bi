@@ -11,15 +11,9 @@ import (
 func TestPoolQueueFullReturnsErr(t *testing.T) {
 	// 1 worker, queue depth 1. Steady state: worker holds one job inside
 	// SaveAs (gate-blocked); one more job sits in the queue. Any further
-	// Run hits the queue cap and returns ErrQueueFull.
-	//
-	// Earlier the test relied on time.Sleep(50ms) to let two background
-	// Runs enqueue before submitting a third. Under -race in slow CI
-	// containers the 50ms sometimes wasn't enough — third Run would beat
-	// the second to the queue, succeed, t.Fatalf would fire, and workers
-	// stuck on <-gate would deadlock the cleanup at p.Close. Replaced
-	// the sleep with explicit barriers so the test's invariants hold
-	// regardless of scheduler latency.
+	// Run hits the queue cap and returns ErrQueueFull. Use barriers
+	// (saveAsEntered, queue-length poll) instead of a time.Sleep so the
+	// invariant holds under any scheduler.
 	doc := &fakeDocument{parts: 1}
 	gate := make(chan struct{})
 	saveAsEntered := make(chan struct{}, 1)
@@ -45,7 +39,7 @@ func TestPoolQueueFullReturnsErr(t *testing.T) {
 
 	in := tmpFile(t, "doc.docx", []byte("x"))
 
-	// Job 1: submit and wait for the worker to pick it up and enter SaveAs.
+	// barrier: job 1 reaches saveAsHook (worker is busy)
 	enqueued := make(chan struct{})
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -61,9 +55,8 @@ func TestPoolQueueFullReturnsErr(t *testing.T) {
 		t.Fatal("timeout waiting for first job to reach saveAsHook")
 	}
 
-	// Job 2: submit and wait for it to be enqueued (Run blocked on outcome).
-	// We can't observe enqueue completion directly, so spin briefly until
-	// the queue is full (third send would fail).
+	// barrier: job 2 enqueued. We can't observe enqueue completion directly;
+	// poll queue length instead.
 	wg.Add(1)
 	job2Submitted := make(chan struct{})
 	go func() {
@@ -73,7 +66,6 @@ func TestPoolQueueFullReturnsErr(t *testing.T) {
 	}()
 	<-job2Submitted
 
-	// Spin until queue is full. Cap at 2 seconds.
 	deadline := time.Now().Add(2 * time.Second)
 	for {
 		if len(p.queue) == cap(p.queue) {

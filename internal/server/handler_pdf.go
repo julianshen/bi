@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"strconv"
-	"strings"
 
 	"github.com/julianshen/bi/internal/worker"
 )
@@ -20,8 +19,9 @@ func (s *Server) convertPDF(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleConversion is the shared body-capture + worker-dispatch + response-stream
-// pipeline used by every conversion handler. Job-shape decisions belong to the
-// caller, communicated via build().
+// pipeline used by every conversion handler. The caller passes a partly-built
+// worker.Job (Format and any per-format options); handleConversion fills InPath
+// after staging the request body.
 func (s *Server) handleConversion(w http.ResponseWriter, r *http.Request, job worker.Job) {
 	ct := r.Header.Get("Content-Type")
 	if ct == "" {
@@ -75,7 +75,13 @@ func (s *Server) handleConversion(w http.ResponseWriter, r *http.Request, job wo
 	}
 	w.Header().Set("Content-Length", strconv.FormatInt(info.Size(), 10))
 	w.WriteHeader(http.StatusOK)
-	_, _ = io.Copy(w, f)
+	if _, err := io.Copy(w, f); err != nil {
+		// Status was already written; we can't change it. Log so a stream
+		// truncation (client disconnect, disk read error, ResponseWriter
+		// failure) is observable instead of silent.
+		s.deps.Logger.WarnContext(r.Context(), "stream response",
+			"err", err, "path", r.URL.Path)
+	}
 }
 
 // extensionFromContentType returns a leading-dot extension that LibreOffice
@@ -117,14 +123,8 @@ func extensionFromContentType(ct string) string {
 	case "text/csv":
 		return ".csv"
 	}
-	if exts, _ := mime.ExtensionsByType(ct); len(exts) > 0 {
+	if exts, _ := mime.ExtensionsByType(mt); len(exts) > 0 {
 		return exts[0]
-	}
-	// Fall back to a generic ".bin" so the file at least has *some*
-	// extension; LO will still produce a meaningful error if it really
-	// can't parse the content.
-	if strings.HasPrefix(mt, "application/") || strings.HasPrefix(mt, "text/") {
-		return ".bin"
 	}
 	return ""
 }

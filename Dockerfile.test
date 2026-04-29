@@ -1,15 +1,9 @@
 # syntax=docker/dockerfile:1.7
 #
-# Test image: build toolchain + LibreOffice + GODEBUG asyncpreemptoff. Runs
-# integration-tagged tests (which include the regular tests) against a real
-# LO install, plus the coverage gate. A passing `docker build -f Dockerfile.test .`
-# is a stronger guarantee than `go test ./...` on a host without LO.
-#
-# Kept in a separate Dockerfile so legacy Docker builds (DOCKER_BUILDKIT=0
-# of the regular Dockerfile) don't execute this matrix as a side effect of
-# producing the runtime image.
-#
-# `make docker-test` is the canonical entry point.
+# Test image: runs the full test matrix against a real LibreOffice install —
+# host `go test` can't exercise the cgo LOK path. Separate from the runtime
+# Dockerfile so the legacy Docker builder (DOCKER_BUILDKIT=0) of the runtime
+# image doesn't drag the test stages along as a side effect.
 
 FROM golang:1.25-bookworm AS test
 

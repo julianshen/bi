@@ -51,7 +51,7 @@ cover-gate:
 	    }' || fail=1; \
 	done; \
 	exit $$fail
-# worker's threshold is 80% rather than 90%: the run_*.go conversion paths
+# worker's threshold is 85% rather than 90%: the run_*.go conversion paths
 # have ~6 filesystem-error branches (CreateTemp / Write / Close failures)
 # that need OS-level injection to exercise. Real LO coverage from
 # make test-integration brings the integrated number well above 90%.

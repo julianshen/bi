@@ -22,9 +22,10 @@ func TestExtensionFromContentType(t *testing.T) {
 		{"text/html", ".html"},
 		{"text/csv", ".csv"},
 		{"text/plain; charset=utf-8", ".txt"},
-		{"application/octet-stream", ".bin"},
-		{"weird/garbage", ""},
-		{"not even a media type;;;", ""},
+		{"application/octet-stream", ".bin"}, // resolves via mime.ExtensionsByType
+		{"image/png", ".png"},                // ditto
+		{"unknown/zzz-no-such-subtype", ""},  // unparseable parses fine but maps to nothing
+		{"not even a media type;;;", ""},     // genuine parse error
 	}
 	for _, c := range cases {
 		t.Run(c.ct, func(t *testing.T) {
