@@ -28,14 +28,22 @@ func (s *Server) healthz(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) readyz(w http.ResponseWriter, r *http.Request) {
 	s.readyzC.mu.Lock()
-	defer s.readyzC.mu.Unlock()
 	if !s.readyzC.last.IsZero() && time.Since(s.readyzC.last) < s.readyzC.ttl {
-		s.respondReady(w, s.readyzC.lastErr)
+		err := s.readyzC.lastErr
+		s.readyzC.mu.Unlock()
+		s.respondReady(w, err)
 		return
 	}
+	s.readyzC.mu.Unlock()
+
+	// Run the probe outside the lock so concurrent /readyz requests don't
+	// pile up behind a single ConvertTimeout-long conversion.
 	err := s.runReadyzProbe(r.Context())
+
+	s.readyzC.mu.Lock()
 	s.readyzC.last = time.Now()
 	s.readyzC.lastErr = err
+	s.readyzC.mu.Unlock()
 	s.respondReady(w, err)
 }
 
