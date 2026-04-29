@@ -26,10 +26,7 @@ func normaliseHeadings(md []byte) []byte {
 	}
 	delta := minLevel - 1
 	return headingRE.ReplaceAllFunc(md, func(b []byte) []byte {
-		var buf bytes.Buffer
 		hashes := bytes.IndexByte(b, ' ')
-		buf.WriteString(strings.Repeat("#", len(b[:hashes])-delta))
-		buf.WriteByte(' ')
-		return buf.Bytes()
+		return []byte(strings.Repeat("#", hashes-delta) + " ")
 	})
 }
