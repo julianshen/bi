@@ -1,0 +1,49 @@
+# syntax=docker/dockerfile:1.7
+#
+# Test image: build toolchain + LibreOffice + GODEBUG asyncpreemptoff. Runs
+# integration-tagged tests (which include the regular tests) against a real
+# LO install, plus the coverage gate. A passing `docker build -f Dockerfile.test .`
+# is a stronger guarantee than `go test ./...` on a host without LO.
+#
+# Kept in a separate Dockerfile so legacy Docker builds (DOCKER_BUILDKIT=0
+# of the regular Dockerfile) don't execute this matrix as a side effect of
+# producing the runtime image.
+#
+# `make docker-test` is the canonical entry point.
+
+FROM golang:1.25-bookworm AS test
+
+ENV CGO_ENABLED=1 \
+    GOFLAGS="-trimpath" \
+    GOPROXY=https://proxy.golang.org,direct \
+    LOK_PATH=/usr/lib/libreoffice/program \
+    GODEBUG=asyncpreemptoff=1
+# GODEBUG=asyncpreemptoff=1: required for LO+cgo (see Dockerfile runtime stage).
+# The integration tests load LO too, so without this they would crash on the
+# first preempt that lands while LO C code is on stack.
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+        libreoffice-core \
+        libreoffice-writer \
+        libreoffice-calc \
+        libreoffice-impress \
+        libreoffice-draw \
+        ca-certificates \
+        fonts-liberation \
+        fonts-dejavu-core \
+ && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+# `-tags=integration` already covers the unit tests (Go build tags are
+# additive, not exclusive), so a single test invocation runs the full set.
+RUN go vet ./... \
+ && gofmt -s -l . | (! grep .) \
+ && go test -tags=integration -race ./... \
+ && make cover-gate

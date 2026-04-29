@@ -57,24 +57,22 @@ func (s *Server) handleConversion(w http.ResponseWriter, r *http.Request, job wo
 	}
 	defer os.Remove(res.OutPath)
 
-	// Buffer the output through []byte rather than streaming via os.Open
-	// + io.Copy. With LO 25.x in this image, a streamed response from the
-	// just-written file occasionally panics LO with "Unspecified Application
-	// Error" — likely an inotify/file-handle interaction with LO's still-
-	// open output. ReadFile-then-Write avoids it. Outputs are bounded by
-	// MaxUploadBytes anyway.
-	body, err := os.ReadFile(res.OutPath)
+	f, err := os.Open(res.OutPath)
 	if err != nil {
 		WriteProblem(w, r.URL.Path, RequestIDFrom(r.Context()), err)
 		return
 	}
+	defer f.Close()
+
 	w.Header().Set("Content-Type", res.MIME)
 	if res.TotalPages > 0 {
 		w.Header().Set("X-Total-Pages", strconv.Itoa(res.TotalPages))
 	}
-	w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+	if info, err := f.Stat(); err == nil {
+		w.Header().Set("Content-Length", strconv.FormatInt(info.Size(), 10))
+	}
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(body)
+	_, _ = io.Copy(w, f)
 }
 
 // extensionFromContentType returns a leading-dot extension that LibreOffice

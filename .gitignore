@@ -6,7 +6,8 @@
 # Test / coverage artefacts
 coverage.out
 coverage.html
-*.test
+*.test         # Go test binaries — Dockerfile.test is exempted via !
+!Dockerfile.test
 *.prof
 
 # Editor / OS
@@ -17,3 +18,4 @@ coverage.html
 # Go workspace
 go.work
 go.work.sum
+.claude/

@@ -65,12 +65,13 @@ tidy:
 docker:
 	docker build -t bi:dev .
 
-# Run the full test matrix (unit + integration + cover-gate) inside a
+# Run the full test matrix (vet/gofmt/integration/cover-gate) inside a
 # container that has LibreOffice installed. Useful when LO isn't available
 # on the dev host. A passing build proves the cgo path works against a
-# real LO install.
+# real LO install. Lives in a separate Dockerfile.test so plain
+# `docker build .` doesn't trigger it on legacy Docker builders.
 docker-test:
-	docker build --target test -t bi:test .
+	docker build -f Dockerfile.test -t bi:test .
 
 run: build
 	./bin/bi
