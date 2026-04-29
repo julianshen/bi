@@ -26,6 +26,40 @@ type officeReturning struct{ doc lokDocument }
 func (o officeReturning) Load(string, string) (lokDocument, error) { return o.doc, nil }
 func (o officeReturning) Close() error                             { return nil }
 
+// TestNewClosesOfficeOnNewWithOfficeError pins that when newOffice succeeds
+// but newWithOffice rejects the cfg, New closes the already-opened office to
+// avoid leaking it on the early return.
+func TestNewClosesOfficeOnNewWithOfficeError(t *testing.T) {
+	office := &fakeOffice{}
+	prev := newOffice
+	newOffice = func(string) (lokOffice, error) { return office, nil }
+	t.Cleanup(func() { newOffice = prev })
+
+	_, err := New(Config{LOKPath: "/x", Workers: 0, QueueDepth: 1, ConvertTimeout: time.Second})
+	if err == nil {
+		t.Fatal("want cfg-validation error")
+	}
+	if office.closeCalls != 1 {
+		t.Fatalf("office.Close called %d times, want 1 (must close on newWithOffice failure)", office.closeCalls)
+	}
+}
+
+func TestNewWiresMDAdapterOnSuccess(t *testing.T) {
+	office := &fakeOffice{}
+	prev := newOffice
+	newOffice = func(string) (lokOffice, error) { return office, nil }
+	t.Cleanup(func() { newOffice = prev })
+
+	p, err := New(Config{LOKPath: "/x", Workers: 1, QueueDepth: 1, ConvertTimeout: time.Second})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = p.Close() })
+	if p.md == nil {
+		t.Fatal("New did not wire mdAdapter")
+	}
+}
+
 func TestNewSurfacesNewRealOfficeError(t *testing.T) {
 	// In nolok build, newRealOffice returns an error stub; New must
 	// propagate it instead of returning a partially-initialised Pool.

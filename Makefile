@@ -6,7 +6,7 @@ PKG             ?= ./...
 COVERAGE_FILE   ?= coverage.out
 COVERAGE_MIN    ?= 90
 
-.PHONY: build vet test test-integration cover cover-gate fmt tidy docker run clean
+.PHONY: build vet test test-integration cover cover-gate fmt tidy docker docker-test run clean
 
 build:
 	$(GO) build -o bin/bi ./cmd/bi
@@ -51,7 +51,7 @@ cover-gate:
 	    }' || fail=1; \
 	done; \
 	exit $$fail
-# worker's threshold is 80% rather than 90%: the run_*.go conversion paths
+# worker's threshold is 85% rather than 90%: the run_*.go conversion paths
 # have ~6 filesystem-error branches (CreateTemp / Write / Close failures)
 # that need OS-level injection to exercise. Real LO coverage from
 # make test-integration brings the integrated number well above 90%.
@@ -64,6 +64,14 @@ tidy:
 
 docker:
 	docker build -t bi:dev .
+
+# Run the full test matrix (vet/gofmt/integration/cover-gate) inside a
+# container that has LibreOffice installed. Useful when LO isn't available
+# on the dev host. A passing build proves the cgo path works against a
+# real LO install. Lives in a separate Dockerfile.test so plain
+# `docker build .` doesn't trigger it on legacy Docker builders.
+docker-test:
+	docker build -f Dockerfile.test -t bi:test .
 
 run: build
 	./bin/bi

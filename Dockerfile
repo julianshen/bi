@@ -26,6 +26,12 @@ RUN go build -ldflags="-s -w" -o /out/bi ./cmd/bi
 # to avoid the GUI front-end. LOK loads libsofficeapp.so / libmergedlo.so
 # from /usr/lib/libreoffice/program at runtime via dlopen, so the full
 # LibreOffice tree must be present — scratch / distroless will not work.
+#
+# Note: the test pipeline (vet/gofmt/race/integration/cover-gate) lives in
+# Dockerfile.test, NOT here. Keeping it out of this Dockerfile prevents the
+# legacy Docker builder (DOCKER_BUILDKIT=0) from executing the test matrix
+# during a plain `docker build .` — which would happen because the legacy
+# builder walks every stage in the file regardless of --target.
 # ─────────────────────────────────────────────────────────────────────────────
 FROM debian:bookworm-slim AS runtime
 
@@ -42,7 +48,12 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
 ENV LOK_PATH=/usr/lib/libreoffice/program \
-    BI_LISTEN_ADDR=:8080
+    BI_LISTEN_ADDR=:8080 \
+    GODEBUG=asyncpreemptoff=1
+# GODEBUG=asyncpreemptoff=1 is required: LibreOffice installs a SIGURG handler
+# without SA_ONSTACK, which crashes the Go runtime (Go uses SIGURG for goroutine
+# preemption since 1.14). Disabling async preemption is the standard workaround
+# for cgo programs that load LO. Slight scheduling-fairness cost is acceptable.
 
 # Run as a non-root user. Conversions write to /tmp; HOME must be writable
 # because LibreOffice spawns user-profile directories on first call.

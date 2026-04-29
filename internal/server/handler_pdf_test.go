@@ -42,6 +42,12 @@ func TestPDFHandlerHappyPath(t *testing.T) {
 	if conv.got.Format != worker.FormatPDF {
 		t.Errorf("Format = %v, want PDF", conv.got.Format)
 	}
+	// LO refuses to load files without a recognisable extension. Pin that
+	// the temp filename ends with ".docx" so a refactor that drops the
+	// extensionFromContentType call can't silently regress.
+	if !strings.HasSuffix(conv.got.InPath, ".docx") {
+		t.Errorf("InPath = %q, want .docx suffix", conv.got.InPath)
+	}
 }
 
 func TestPDFHandlerRejectsEmptyContentType(t *testing.T) {

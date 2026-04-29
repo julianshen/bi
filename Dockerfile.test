@@ -1,0 +1,47 @@
+# syntax=docker/dockerfile:1.7
+#
+# Test image: runs the full test matrix against a real LibreOffice install —
+# host `go test` can't exercise the cgo LOK path. Separate from the runtime
+# Dockerfile so the legacy Docker builder (DOCKER_BUILDKIT=0) of the runtime
+# image doesn't drag the test stages along as a side effect.
+
+FROM golang:1.25-bookworm AS test
+
+ENV CGO_ENABLED=1 \
+    GOFLAGS="-trimpath" \
+    GOPROXY=https://proxy.golang.org,direct \
+    LOK_PATH=/usr/lib/libreoffice/program \
+    GODEBUG=asyncpreemptoff=1
+# GODEBUG=asyncpreemptoff=1: required for LO+cgo (see Dockerfile runtime stage).
+# The integration tests load LO too, so without this they would crash on the
+# first preempt that lands while LO C code is on stack.
+
+# Only writer + calc are exercised by the integration tests against
+# real LO. impress / draw aren't loaded by any test target, so we omit
+# them to keep the image small and the build fast. Production runtime
+# (Dockerfile) installs all four because real users upload pptx/odp/odg.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+        libreoffice-core \
+        libreoffice-writer \
+        libreoffice-calc \
+        ca-certificates \
+        fonts-liberation \
+        fonts-dejavu-core \
+ && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+# `-tags=integration` covers the unit tests too (Go build tags are
+# additive, not exclusive). cover-gate runs separately because it
+# uses `-tags=nolok` to swap the cgo adapter for a stub — the
+# resulting profile is incompatible with the integration build.
+RUN go vet ./... \
+ && gofmt -s -l . | (! grep .) \
+ && go test -tags=integration -race ./... \
+ && make cover-gate
