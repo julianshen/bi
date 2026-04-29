@@ -20,6 +20,48 @@ COPY . .
 RUN go build -ldflags="-s -w" -o /out/bi ./cmd/bi
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Stage 1b — full test image: build toolchain + LibreOffice. Runs both unit
+# tests and integration tests against a real LO install, so a passing
+# `docker build --target test .` is a stronger guarantee than `go test ./...`
+# on a host without LO.
+#
+# The integration-tagged tests skip when LOK_PATH is unset; we set it.
+# ─────────────────────────────────────────────────────────────────────────────
+FROM golang:1.25-bookworm AS test
+
+ENV CGO_ENABLED=1 \
+    GOFLAGS="-trimpath" \
+    GOPROXY=https://proxy.golang.org,direct \
+    LOK_PATH=/usr/lib/libreoffice/program
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+        libreoffice-core \
+        libreoffice-writer \
+        libreoffice-calc \
+        libreoffice-impress \
+        libreoffice-draw \
+        ca-certificates \
+        fonts-liberation \
+        fonts-dejavu-core \
+ && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+# Unit tests + integration tests + coverage gate. Any failure aborts the
+# image build.
+RUN go vet ./... \
+ && gofmt -s -l . | (! grep .) \
+ && go test -race ./... \
+ && go test -tags=integration -race ./... \
+ && make cover-gate
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Stage 2 — runtime image with LibreOffice installed.
 #
 # We pull the per-app split packages instead of the meta `libreoffice` package

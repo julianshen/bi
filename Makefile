@@ -6,7 +6,7 @@ PKG             ?= ./...
 COVERAGE_FILE   ?= coverage.out
 COVERAGE_MIN    ?= 90
 
-.PHONY: build vet test test-integration cover cover-gate fmt tidy docker run clean
+.PHONY: build vet test test-integration cover cover-gate fmt tidy docker docker-test run clean
 
 build:
 	$(GO) build -o bin/bi ./cmd/bi
@@ -64,6 +64,13 @@ tidy:
 
 docker:
 	docker build -t bi:dev .
+
+# Run the full test matrix (unit + integration + cover-gate) inside a
+# container that has LibreOffice installed. Useful when LO isn't available
+# on the dev host. A passing build proves the cgo path works against a
+# real LO install.
+docker-test:
+	docker build --target test -t bi:test .
 
 run: build
 	./bin/bi
