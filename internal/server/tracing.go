@@ -13,8 +13,7 @@ import (
 
 // InitTracing wires an OTLP/gRPC exporter using standard OTEL_* env and
 // returns a shutdown func to call at exit. Per-request spans come from
-// otelhttp middleware automatically — explicit Tracer wiring will land
-// when the worker introduces queue.wait / lok.* spans.
+// the otelhttp middleware automatically.
 func InitTracing(ctx context.Context, serviceName string) (func(context.Context) error, error) {
 	exp, err := otlptracegrpc.New(ctx)
 	if err != nil {

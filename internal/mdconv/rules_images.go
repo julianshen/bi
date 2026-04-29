@@ -10,6 +10,11 @@ import (
 	"strings"
 )
 
+// 4 MiB per embedded image. Larger images are dropped — a typical
+// embedded screenshot is well under 1 MiB; anything bigger is more
+// likely a paste-in print resolution that nobody reads in Markdown.
+const maxEmbedImageBytes = 4 * 1024 * 1024
+
 var multiBlankRE = regexp.MustCompile(`\n{3,}`)
 
 var imgRE = regexp.MustCompile(`!\[([^\]]*)\]\(([^)]+)\)`)
@@ -34,9 +39,14 @@ func applyImageMode(md []byte, mode ImageMode, resolveDir string) []byte {
 			if !ok {
 				return nil // path-traversal attempt or unresolved → drop
 			}
+			// Bound peak memory: a document with many large images would
+			// otherwise blow heap on (size + 4/3 base64) per image.
+			if fi, err := os.Stat(abs); err != nil || fi.Size() > maxEmbedImageBytes {
+				return nil
+			}
 			data, err := os.ReadFile(abs)
 			if err != nil {
-				return nil // drop unresolved images silently
+				return nil
 			}
 			mime := http.DetectContentType(data)
 			b64 := base64.StdEncoding.EncodeToString(data)
@@ -55,7 +65,7 @@ func applyImageMode(md []byte, mode ImageMode, resolveDir string) []byte {
 	}
 }
 
-func isDataURI(s string) bool { return len(s) >= 5 && s[:5] == "data:" }
+func isDataURI(s string) bool { return strings.HasPrefix(s, "data:") }
 
 // resolveImageSrc joins resolveDir + src and refuses anything that escapes
 // resolveDir via .. — blocks crafted document `<img src="../../etc/passwd">`

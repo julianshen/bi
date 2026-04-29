@@ -47,8 +47,10 @@ func TestPoolConcurrentRunCloseDoesNotPanic(t *testing.T) {
 				_, _ = p.Run(context.Background(), Job{InPath: in, Format: FormatPDF})
 			}()
 		}
-		// Close concurrently with the in-flight Runs.
-		go func() { _ = p.Close() }()
+		// Close concurrently with the in-flight Runs. Wait for it explicitly
+		// so a Close-goroutine doesn't leak across trial iterations.
+		wg.Add(1)
+		go func() { defer wg.Done(); _ = p.Close() }()
 		wg.Wait()
 	}
 }
