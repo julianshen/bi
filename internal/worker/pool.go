@@ -142,9 +142,19 @@ func (p *Pool) Run(ctx context.Context, job Job) (Result, error) {
 	out := make(chan runOutcome, 1)
 	env := jobEnvelope{ctx: timeoutCtx, job: job, result: out}
 
+	// Hold closeMu across the enqueue so Close cannot close(p.queue)
+	// between the select's evaluation and the actual send. Without this,
+	// a concurrent Run + Close can panic on send-to-closed-channel.
+	p.closeMu.Lock()
+	if p.closed {
+		p.closeMu.Unlock()
+		return Result{}, ErrPoolClosed
+	}
 	select {
 	case p.queue <- env:
+		p.closeMu.Unlock()
 	default:
+		p.closeMu.Unlock()
 		return Result{}, ErrQueueFull
 	}
 

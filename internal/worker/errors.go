@@ -9,6 +9,7 @@ import (
 
 var (
 	ErrQueueFull          = errors.New("worker: queue full")
+	ErrPoolClosed         = errors.New("worker: pool closed")
 	ErrPasswordRequired   = errors.New("worker: password required")
 	ErrWrongPassword      = errors.New("worker: wrong password")
 	ErrUnsupportedFormat  = errors.New("worker: unsupported document")
