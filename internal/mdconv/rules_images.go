@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 )
 
 var multiBlankRE = regexp.MustCompile(`\n{3,}`)
@@ -29,9 +30,9 @@ func applyImageMode(md []byte, mode ImageMode, resolveDir string) []byte {
 			if isDataURI(src) {
 				return match
 			}
-			abs := src
-			if !filepath.IsAbs(abs) {
-				abs = filepath.Join(resolveDir, src)
+			abs, ok := resolveImageSrc(resolveDir, src)
+			if !ok {
+				return nil // path-traversal attempt or unresolved → drop
 			}
 			data, err := os.ReadFile(abs)
 			if err != nil {
@@ -55,3 +56,20 @@ func applyImageMode(md []byte, mode ImageMode, resolveDir string) []byte {
 }
 
 func isDataURI(s string) bool { return len(s) >= 5 && s[:5] == "data:" }
+
+// resolveImageSrc joins resolveDir + src and refuses anything that escapes
+// resolveDir via .. — blocks crafted document `<img src="../../etc/passwd">`
+// from disclosing arbitrary host files in the rendered Markdown. Absolute
+// paths are also rejected because LO HTML export should never emit them
+// for embedded images.
+func resolveImageSrc(resolveDir, src string) (string, bool) {
+	if filepath.IsAbs(src) {
+		return "", false
+	}
+	abs := filepath.Join(resolveDir, src)
+	rel, err := filepath.Rel(resolveDir, abs)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", false
+	}
+	return abs, true
+}
