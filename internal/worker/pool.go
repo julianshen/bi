@@ -18,7 +18,7 @@ type Pool struct {
 	closeMu  sync.Mutex
 	closed   bool
 	closeErr error
-	md       htmlToMarkdown // nil by default; set in production via mdAdapter (Task 17)
+	md       htmlToMarkdown // nil by default; set in production via mdAdapter
 }
 
 type jobEnvelope struct {
