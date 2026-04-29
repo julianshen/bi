@@ -21,13 +21,11 @@ func (s *Server) handlePNGLike(w http.ResponseWriter, r *http.Request, defaultDP
 		WriteProblem(w, r.URL.Path, RequestIDFrom(r.Context()), err)
 		return
 	}
-	s.handleConversion(w, r, func() worker.Job {
-		return worker.Job{
-			Format:   worker.FormatPNG,
-			Page:     page,
-			DPI:      dpi,
-			Password: r.Header.Get("X-Bi-Password"),
-		}
+	s.handleConversion(w, r, worker.Job{
+		Format:   worker.FormatPNG,
+		Page:     page,
+		DPI:      dpi,
+		Password: r.Header.Get("X-Bi-Password"),
 	})
 }
 

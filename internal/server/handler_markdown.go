@@ -19,11 +19,9 @@ func (s *Server) convertMarkdown(w http.ResponseWriter, r *http.Request) {
 			ErrBadQuery{Param: "images", Value: raw})
 		return
 	}
-	s.handleConversion(w, r, func() worker.Job {
-		return worker.Job{
-			Format:         worker.FormatMarkdown,
-			MarkdownImages: mode,
-			Password:       r.Header.Get("X-Bi-Password"),
-		}
+	s.handleConversion(w, r, worker.Job{
+		Format:         worker.FormatMarkdown,
+		MarkdownImages: mode,
+		Password:       r.Header.Get("X-Bi-Password"),
 	})
 }
