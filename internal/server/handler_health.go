@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	_ "embed"
+	"errors"
 	"net/http"
 	"os"
 	"sync"
@@ -66,7 +67,7 @@ func (s *Server) runReadyzProbe(ctx context.Context) error {
 	}
 	tmp.Close()
 	if s.deps.Conv == nil {
-		return nil // tests that don't supply a converter pass readyz
+		return errors.New("readyz: converter not wired")
 	}
 	res, err := s.deps.Conv.Run(ctx, worker.Job{
 		InPath: tmp.Name(),

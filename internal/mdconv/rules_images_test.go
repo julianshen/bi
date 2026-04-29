@@ -20,6 +20,22 @@ func TestApplyImageModeDropsOversizedImage(t *testing.T) {
 	}
 }
 
+// TestApplyImageModeAtMaxBoundaryEmbeds pins that the size guard uses strict
+// `>` (size == max embeds, size == max+1 drops). Without this an off-by-one
+// flip from `>` to `>=` would silently bias against valid images.
+func TestApplyImageModeAtMaxBoundaryEmbeds(t *testing.T) {
+	dir := t.TempDir()
+	atMax := filepath.Join(dir, "max.png")
+	if err := os.WriteFile(atMax, make([]byte, maxEmbedImageBytes), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	md := []byte("![alt](max.png)")
+	out := applyImageMode(md, ImagesEmbed, dir)
+	if !strings.Contains(string(out), "data:") {
+		t.Errorf("image at exact max bytes was dropped: %q", out)
+	}
+}
+
 func TestApplyImageModeDataURIPassesThrough(t *testing.T) {
 	md := []byte("![alt](data:image/png;base64,AAA)")
 	out := applyImageMode(md, ImagesEmbed, ".")

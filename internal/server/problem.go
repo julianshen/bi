@@ -34,6 +34,8 @@ func mapError(err error) problemMapping {
 	switch {
 	case errors.Is(err, worker.ErrQueueFull):
 		return problemMapping{"queue-full", "Server busy", http.StatusTooManyRequests}
+	case errors.Is(err, worker.ErrPoolClosed):
+		return problemMapping{"shutting-down", "Service shutting down", http.StatusServiceUnavailable}
 	case errors.Is(err, worker.ErrPasswordRequired):
 		return problemMapping{"password-required", "Password required", http.StatusUnprocessableEntity}
 	case errors.Is(err, worker.ErrWrongPassword):

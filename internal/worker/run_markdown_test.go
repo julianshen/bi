@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -36,10 +37,12 @@ func TestPoolRunMarkdownHappyPath(t *testing.T) {
 	md := &fakeMD{out: []byte("# hello\n")}
 	p.setMarkdown(md)
 
+	var capturedHTMLPath string
 	doc.saveAsHook = func(path, filter, _ string) error {
 		if filter != "html" {
 			t.Errorf("filter = %q, want html", filter)
 		}
+		capturedHTMLPath = path
 		return os.WriteFile(path, []byte("<p>hello</p>"), 0o600)
 	}
 
@@ -58,6 +61,9 @@ func TestPoolRunMarkdownHappyPath(t *testing.T) {
 	}
 	if md.images != MarkdownImagesEmbed {
 		t.Errorf("md.images = %v, want Embed", md.images)
+	}
+	if want := filepath.Dir(capturedHTMLPath); md.base != want {
+		t.Errorf("md.base = %q, want %q (filepath.Dir of html temp)", md.base, want)
 	}
 	got, _ := os.ReadFile(res.OutPath)
 	if string(got) != "# hello\n" {
