@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http/httptest"
 	"testing"
 
@@ -19,6 +20,9 @@ func TestWriteProblemFromError(t *testing.T) {
 		wantStat int
 	}{
 		{"queue full", worker.ErrQueueFull, "queue-full", 429},
+		{"pool closed", worker.ErrPoolClosed, "shutting-down", 503},
+		{"markdown pipeline", worker.ErrMarkdownConversion, "markdown-pipeline", 500},
+		{"markdown pipeline wrapped", fmt.Errorf("%w: io fail", worker.ErrMarkdownConversion), "markdown-pipeline", 500},
 		{"password required", worker.ErrPasswordRequired, "password-required", 422},
 		{"wrong password", worker.ErrWrongPassword, "password-wrong", 422},
 		{"unsupported document", worker.ErrUnsupportedFormat, "unsupported-document", 422},

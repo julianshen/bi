@@ -3,7 +3,7 @@ package worker
 import "testing"
 
 func TestMDAdapterDelegates(t *testing.T) {
-	got, err := mdAdapter{}.Convert([]byte("<p>hi</p>"), MarkdownImagesEmbed)
+	got, err := mdAdapter{}.Convert([]byte("<p>hi</p>"), MarkdownImagesEmbed, ".")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -15,7 +15,7 @@ func TestMDAdapterDelegates(t *testing.T) {
 func TestMDAdapterMapsDropMode(t *testing.T) {
 	// With Drop mode, an image-bearing HTML should produce output without
 	// a Markdown image reference.
-	got, err := mdAdapter{}.Convert([]byte(`<p>x</p><img src="missing.png" alt="a"/><p>y</p>`), MarkdownImagesDrop)
+	got, err := mdAdapter{}.Convert([]byte(`<p>x</p><img src="missing.png" alt="a"/><p>y</p>`), MarkdownImagesDrop, ".")
 	if err != nil {
 		t.Fatal(err)
 	}

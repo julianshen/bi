@@ -114,15 +114,9 @@ func AccessLog(logger *slog.Logger) func(http.Handler) http.Handler {
 type statusRecorder struct {
 	http.ResponseWriter
 	status int
-	bytes  int64
 }
 
 func (r *statusRecorder) WriteHeader(code int) {
 	r.status = code
 	r.ResponseWriter.WriteHeader(code)
-}
-func (r *statusRecorder) Write(b []byte) (int, error) {
-	n, err := r.ResponseWriter.Write(b)
-	r.bytes += int64(n)
-	return n, err
 }

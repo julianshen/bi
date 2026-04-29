@@ -9,6 +9,7 @@ import (
 
 var (
 	ErrQueueFull          = errors.New("worker: queue full")
+	ErrPoolClosed         = errors.New("worker: pool closed")
 	ErrPasswordRequired   = errors.New("worker: password required")
 	ErrWrongPassword      = errors.New("worker: wrong password")
 	ErrUnsupportedFormat  = errors.New("worker: unsupported document")
@@ -54,8 +55,6 @@ func Classify(err error) error {
 	}
 	return err
 }
-
-var errNotImplemented = errors.New("worker: not implemented")
 
 var (
 	ErrPageOutOfRange = errors.New("worker: page out of range")

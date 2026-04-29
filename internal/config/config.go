@@ -29,10 +29,7 @@ func Load(env map[string]string) (Config, error) {
 		ConvertTimeout: 120 * time.Second,
 		ReadyzCacheTTL: 5 * time.Second,
 	}
-	c.Workers = runtime.NumCPU()
-	if c.Workers > 4 {
-		c.Workers = 4
-	}
+	c.Workers = min(runtime.NumCPU(), 4)
 	c.QueueDepth = c.Workers * 2
 
 	if v, ok := env["BI_LISTEN_ADDR"]; ok {

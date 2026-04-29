@@ -20,13 +20,16 @@ func (s *Server) convertPDF(w http.ResponseWriter, r *http.Request) {
 // pipeline used by every conversion handler. Job-shape decisions belong to the
 // caller, communicated via build().
 func (s *Server) handleConversion(w http.ResponseWriter, r *http.Request, build func() worker.Job) {
+	fail := func(err error) {
+		WriteProblem(w, r.URL.Path, RequestIDFrom(r.Context()), err)
+	}
 	if r.Header.Get("Content-Type") == "" {
-		WriteProblem(w, r.URL.Path, RequestIDFrom(r.Context()), ErrMissingContentType)
+		fail(ErrMissingContentType)
 		return
 	}
 	tmp, err := os.CreateTemp("", "bi-in-*")
 	if err != nil {
-		WriteProblem(w, r.URL.Path, RequestIDFrom(r.Context()), err)
+		fail(err)
 		return
 	}
 	defer os.Remove(tmp.Name())
@@ -34,14 +37,14 @@ func (s *Server) handleConversion(w http.ResponseWriter, r *http.Request, build 
 		tmp.Close()
 		var maxErr *http.MaxBytesError
 		if errors.As(err, &maxErr) {
-			WriteProblem(w, r.URL.Path, RequestIDFrom(r.Context()), ErrPayloadTooLarge)
+			fail(ErrPayloadTooLarge)
 			return
 		}
-		WriteProblem(w, r.URL.Path, RequestIDFrom(r.Context()), err)
+		fail(err)
 		return
 	}
 	if err := tmp.Close(); err != nil {
-		WriteProblem(w, r.URL.Path, RequestIDFrom(r.Context()), err)
+		fail(err)
 		return
 	}
 
@@ -50,21 +53,22 @@ func (s *Server) handleConversion(w http.ResponseWriter, r *http.Request, build 
 
 	res, err := s.deps.Conv.Run(r.Context(), job)
 	if err != nil {
-		WriteProblem(w, r.URL.Path, RequestIDFrom(r.Context()), err)
+		fail(err)
 		return
 	}
 	defer os.Remove(res.OutPath)
+
+	f, err := os.Open(res.OutPath)
+	if err != nil {
+		fail(err)
+		return
+	}
+	defer f.Close()
 
 	w.Header().Set("Content-Type", res.MIME)
 	if res.TotalPages > 0 {
 		w.Header().Set("X-Total-Pages", strconv.Itoa(res.TotalPages))
 	}
-	f, err := os.Open(res.OutPath)
-	if err != nil {
-		WriteProblem(w, r.URL.Path, RequestIDFrom(r.Context()), err)
-		return
-	}
-	defer f.Close()
 	if info, err := f.Stat(); err == nil {
 		w.Header().Set("Content-Length", strconv.FormatInt(info.Size(), 10))
 	}

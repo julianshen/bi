@@ -8,23 +8,15 @@ import (
 )
 
 func (s *Server) convertPNG(w http.ResponseWriter, r *http.Request) {
-	page, dpi, err := parsePNGParams(r, 1.0)
-	if err != nil {
-		WriteProblem(w, r.URL.Path, RequestIDFrom(r.Context()), err)
-		return
-	}
-	s.handleConversion(w, r, func() worker.Job {
-		return worker.Job{
-			Format:   worker.FormatPNG,
-			Page:     page,
-			DPI:      dpi,
-			Password: r.Header.Get("X-Bi-Password"),
-		}
-	})
+	s.handlePNGLike(w, r, 1.0)
 }
 
 func (s *Server) thumbnail(w http.ResponseWriter, r *http.Request) {
-	page, dpi, err := parsePNGParams(r, 0.5)
+	s.handlePNGLike(w, r, 0.5)
+}
+
+func (s *Server) handlePNGLike(w http.ResponseWriter, r *http.Request, defaultDPI float64) {
+	page, dpi, err := parsePNGParams(r, defaultDPI)
 	if err != nil {
 		WriteProblem(w, r.URL.Path, RequestIDFrom(r.Context()), err)
 		return
@@ -40,7 +32,6 @@ func (s *Server) thumbnail(w http.ResponseWriter, r *http.Request) {
 }
 
 func parsePNGParams(r *http.Request, defaultDPI float64) (page int, dpi float64, err error) {
-	page = 0
 	dpi = defaultDPI
 	if v := r.URL.Query().Get("page"); v != "" {
 		n, perr := strconv.Atoi(v)

@@ -34,13 +34,16 @@ func mapError(err error) problemMapping {
 	switch {
 	case errors.Is(err, worker.ErrQueueFull):
 		return problemMapping{"queue-full", "Server busy", http.StatusTooManyRequests}
+	case errors.Is(err, worker.ErrPoolClosed):
+		return problemMapping{"shutting-down", "Service shutting down", http.StatusServiceUnavailable}
 	case errors.Is(err, worker.ErrPasswordRequired):
 		return problemMapping{"password-required", "Password required", http.StatusUnprocessableEntity}
 	case errors.Is(err, worker.ErrWrongPassword):
 		return problemMapping{"password-wrong", "Wrong password", http.StatusUnprocessableEntity}
-	case errors.Is(err, worker.ErrUnsupportedFormat),
-		errors.Is(err, worker.ErrMarkdownConversion):
+	case errors.Is(err, worker.ErrUnsupportedFormat):
 		return problemMapping{"unsupported-document", "Unsupported document", http.StatusUnprocessableEntity}
+	case errors.Is(err, worker.ErrMarkdownConversion):
+		return problemMapping{"markdown-pipeline", "Markdown rendering failed", http.StatusInternalServerError}
 	case errors.Is(err, worker.ErrLOKUnsupported):
 		return problemMapping{"lok-unsupported", "LibreOffice build is missing required functionality", http.StatusNotImplemented}
 	case errors.Is(err, worker.ErrPageOutOfRange), errors.Is(err, worker.ErrInvalidDPI):

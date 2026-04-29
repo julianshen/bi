@@ -18,7 +18,7 @@ type Pool struct {
 	closeMu  sync.Mutex
 	closed   bool
 	closeErr error
-	md       htmlToMarkdown // nil by default; set in production via mdAdapter (Task 17)
+	md       htmlToMarkdown
 }
 
 type jobEnvelope struct {
@@ -99,16 +99,17 @@ func (p *Pool) execute(ctx context.Context, job Job) (Result, error) {
 }
 
 // Close stops accepting jobs, waits for in-flight work, then closes the
-// underlying lok.Office. Idempotent.
+// underlying lok.Office. Idempotent. The lock is held across the entire
+// shutdown so a racing second caller observes the fully-populated
+// closeErr instead of the zero value.
 func (p *Pool) Close() error {
 	p.closeMu.Lock()
+	defer p.closeMu.Unlock()
 	if p.closed {
-		p.closeMu.Unlock()
 		return p.closeErr
 	}
 	p.closed = true
 	close(p.queue)
-	p.closeMu.Unlock()
 	p.workers.Wait()
 	p.closeErr = p.office.Close()
 	return p.closeErr
@@ -121,7 +122,7 @@ func (p *Pool) setMarkdown(md htmlToMarkdown) { p.md = md }
 // the internal/mdconv package.
 type mdAdapter struct{}
 
-func (mdAdapter) Convert(html []byte, mode MarkdownImageMode) ([]byte, error) {
+func (mdAdapter) Convert(html []byte, mode MarkdownImageMode, base string) ([]byte, error) {
 	var m mdconvpkg.ImageMode
 	switch mode {
 	case MarkdownImagesDrop:
@@ -129,7 +130,7 @@ func (mdAdapter) Convert(html []byte, mode MarkdownImageMode) ([]byte, error) {
 	default:
 		m = mdconvpkg.ImagesEmbed
 	}
-	return mdconvpkg.Convert(html, mdconvpkg.Options{Images: m})
+	return mdconvpkg.ConvertWithBase(html, mdconvpkg.Options{Images: m}, base)
 }
 
 // Run submits a job and waits for the outcome. It honours ctx for both queue
@@ -142,9 +143,19 @@ func (p *Pool) Run(ctx context.Context, job Job) (Result, error) {
 	out := make(chan runOutcome, 1)
 	env := jobEnvelope{ctx: timeoutCtx, job: job, result: out}
 
+	// Hold closeMu across the enqueue so Close cannot close(p.queue)
+	// between the select's evaluation and the actual send. Without this,
+	// a concurrent Run + Close can panic on send-to-closed-channel.
+	p.closeMu.Lock()
+	if p.closed {
+		p.closeMu.Unlock()
+		return Result{}, ErrPoolClosed
+	}
 	select {
 	case p.queue <- env:
+		p.closeMu.Unlock()
 	default:
+		p.closeMu.Unlock()
 		return Result{}, ErrQueueFull
 	}
 

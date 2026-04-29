@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/julianshen/bi/internal/server"
-	"github.com/julianshen/bi/internal/worker"
 )
 
 func TestPNGHandlerHappyPath(t *testing.T) {
@@ -79,6 +78,3 @@ func TestThumbnailDefaultsToPage0LowDPI(t *testing.T) {
 		t.Errorf("thumbnail defaults: page=%d dpi=%v", conv.got.Page, conv.got.DPI)
 	}
 }
-
-// reference an unused import to avoid lint complaints when imports are tightened
-var _ = worker.FormatPNG

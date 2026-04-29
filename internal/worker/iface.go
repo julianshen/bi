@@ -18,8 +18,9 @@ type lokDocument interface {
 }
 
 // htmlToMarkdown is the seam used by runMarkdown so we can unit-test the
-// worker without depending on the mdconv package. The real wiring lives in
-// pool.go (a later task).
+// worker without depending on the mdconv package. base is the directory the
+// HTML file lives in, used to resolve relative <img src> against LO's
+// sibling-file image export.
 type htmlToMarkdown interface {
-	Convert(html []byte, images MarkdownImageMode) ([]byte, error)
+	Convert(html []byte, images MarkdownImageMode, base string) ([]byte, error)
 }
