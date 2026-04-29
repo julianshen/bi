@@ -26,7 +26,18 @@ cover:
 	$(GO) tool cover -func=$(COVERAGE_FILE) | tail -n 1
 
 # Fail if total coverage drops below COVERAGE_MIN.
-cover-gate: cover
+#
+# The gate is calculated against testable Go code:
+#   -coverpkg=./internal/...  excludes cmd/bi bootstrap (binds a port,
+#                             not amenable to unit tests).
+#   -tags=nolok               swaps lok_adapter.go (cgo pass-through to
+#                             LibreOffice) for lok_adapter_nolok.go (stub),
+#                             so the cgo trampolines that can only run with
+#                             a real LO install are not in the profile.
+# Real LO coverage is exercised by `make test-integration` against a host
+# with LibreOffice installed.
+cover-gate:
+	$(GO) test -tags=nolok -covermode=atomic -coverpkg=./internal/... -coverprofile=$(COVERAGE_FILE) ./internal/...
 	@pct=$$($(GO) tool cover -func=$(COVERAGE_FILE) | tail -n 1 | awk '{print $$3}' | tr -d '%'); \
 	awk -v p=$$pct -v m=$(COVERAGE_MIN) 'BEGIN { if (p+0 < m+0) { printf "coverage %.1f%% < %d%%\n", p, m; exit 1 } else { printf "coverage %.1f%% >= %d%%\n", p, m } }'
 
