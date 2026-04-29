@@ -12,13 +12,15 @@ import (
 type fakeMD struct {
 	got    []byte
 	images MarkdownImageMode
+	base   string
 	out    []byte
 	err    error
 }
 
-func (f *fakeMD) Convert(html []byte, images MarkdownImageMode) ([]byte, error) {
+func (f *fakeMD) Convert(html []byte, images MarkdownImageMode, base string) ([]byte, error) {
 	f.got = append(f.got, html...)
 	f.images = images
+	f.base = base
 	if f.err != nil {
 		return nil, f.err
 	}

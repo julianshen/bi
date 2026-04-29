@@ -121,7 +121,7 @@ func (p *Pool) setMarkdown(md htmlToMarkdown) { p.md = md }
 // the internal/mdconv package.
 type mdAdapter struct{}
 
-func (mdAdapter) Convert(html []byte, mode MarkdownImageMode) ([]byte, error) {
+func (mdAdapter) Convert(html []byte, mode MarkdownImageMode, base string) ([]byte, error) {
 	var m mdconvpkg.ImageMode
 	switch mode {
 	case MarkdownImagesDrop:
@@ -129,7 +129,7 @@ func (mdAdapter) Convert(html []byte, mode MarkdownImageMode) ([]byte, error) {
 	default:
 		m = mdconvpkg.ImagesEmbed
 	}
-	return mdconvpkg.Convert(html, mdconvpkg.Options{Images: m})
+	return mdconvpkg.ConvertWithBase(html, mdconvpkg.Options{Images: m}, base)
 }
 
 // Run submits a job and waits for the outcome. It honours ctx for both queue

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 )
 
 func (p *Pool) runMarkdown(ctx context.Context, job Job) (Result, error) {
@@ -12,6 +13,8 @@ func (p *Pool) runMarkdown(ctx context.Context, job Job) (Result, error) {
 		return Result{}, err
 	}
 	if p.md == nil {
+		// Reachable from tests that wire the pool via newWithOffice without
+		// calling setMarkdown. Production New always sets mdAdapter{}.
 		return Result{}, errors.New("worker: markdown converter not wired")
 	}
 	doc, err := p.office.Load(job.InPath, job.Password)
@@ -35,7 +38,7 @@ func (p *Pool) runMarkdown(ctx context.Context, job Job) (Result, error) {
 	if err != nil {
 		return Result{}, fmt.Errorf("worker: read html: %w", err)
 	}
-	mdBytes, err := p.md.Convert(htmlBytes, job.MarkdownImages)
+	mdBytes, err := p.md.Convert(htmlBytes, job.MarkdownImages, filepath.Dir(htmlPath))
 	if err != nil {
 		return Result{}, fmt.Errorf("%w: %v", ErrMarkdownConversion, err)
 	}
