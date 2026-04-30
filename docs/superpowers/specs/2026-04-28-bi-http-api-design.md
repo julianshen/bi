@@ -90,7 +90,7 @@ All routes are versioned under `/v1/`. Request bodies are raw document bytes
 |----------------------------------------|--------|----------------------|---------------------|-------|
 | `/v1/convert/pdf`                      | POST   | document bytes       | `application/pdf`   | Whole-document export. |
 | `/v1/convert/png?page=N&dpi=F`         | POST   | document bytes       | `image/png`         | Single page; `X-Total-Pages: M` always set. `page` 0-based, defaults to 0. `dpi` defaults to 1.0, range [0.1, 4.0]. |
-| `/v1/convert/markdown?images=embed\|drop` | POST | document bytes      | `text/markdown`     | Pipeline: LO → HTML → `mdconv`. `images` defaults to `embed`. |
+| `/v1/convert/markdown?images=embed\|drop` | POST | document bytes      | `text/markdown`     | Pipeline: LO → HTML → `mdconv`. `images` defaults to `embed`. Pptx/odp/ppt inputs auto-emit Marp markdown (front-matter + `---` slide separators). Other formats produce flat markdown unchanged. |
 | `/v1/thumbnail?dpi=F`                  | POST   | document bytes       | `image/png`         | Equivalent to `/v1/convert/png?page=0&dpi=0.5` by default. `X-Total-Pages` set. |
 | `/healthz`                             | GET    | —                    | `text/plain`        | Liveness. 200 iff process responds. |
 | `/readyz`                              | GET    | —                    | `text/plain`        | Readiness. Runs a real conversion of the embedded fixture; 200 on success, 503 otherwise. Last result cached for `BI_READYZ_CACHE_TTL` (default 5 s). |
@@ -268,6 +268,19 @@ custom rules for:
 under `internal/mdconv/testdata/`. It never imports `lok` and never invokes
 LibreOffice. This is the single most behaviourally rich part of the
 Markdown route, and we want it covered without an integration tag.
+
+### Marp output for presentations
+
+When the request Content-Type identifies a presentation
+(`application/vnd.openxmlformats-officedocument.presentationml.presentation`,
+`application/vnd.oasis.opendocument.presentation`, or
+`application/vnd.ms-powerpoint`), the handler sets `Job.MarkdownMarp = true`.
+`mdconv` then prepends `---\nmarp: true\n---\n\n` and replaces horizontal-rule
+slide markers (LO emits `<hr/>` between slides; html-to-markdown renders
+them as `---`, `***`, or `* * *`) with normalised `---` separators. Empty
+segments — produced by adjacent `<hr/>` markers in the source HTML — are
+dropped so the output never contains adjacent separators. Speaker notes
+are not extracted; LO's html filter does not surface them reliably.
 
 ### Markdown caveats (documented behaviour)
 
