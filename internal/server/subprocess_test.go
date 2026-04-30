@@ -202,6 +202,42 @@ fi
 	}
 }
 
+// TestSubprocessConverter_MarpFlagOmittedWhenFalse pins the negative
+// half of the contract: a markdown job with MarkdownMarp=false must
+// not pass -marp. Without this, an "always-append" bug would still
+// satisfy TestSubprocessConverter_MarpFlagForwarded.
+func TestSubprocessConverter_MarpFlagOmittedWhenFalse(t *testing.T) {
+	bin := fakeBinScript(t, `
+out=""
+next_out=0
+saw_marp=0
+for a in "$@"; do
+  if [ "$next_out" = "1" ]; then out="$a"; next_out=0; continue; fi
+  case "$a" in
+    -out) next_out=1 ;;
+    -marp) saw_marp=1 ;;
+  esac
+done
+: > "$out"
+if [ "$saw_marp" = "1" ]; then
+  echo '{"error":"internal","detail":"-marp flag forwarded when MarkdownMarp=false"}'
+  exit 1
+else
+  echo '{"mime":"text/markdown","total_pages":0}'
+fi
+`)
+	in := filepath.Join(t.TempDir(), "in.docx")
+	os.WriteFile(in, []byte("x"), 0o600)
+	c := &SubprocessConverter{BinPath: bin, Timeout: 5 * time.Second}
+	res, err := c.Run(context.Background(), worker.Job{
+		InPath: in, Format: worker.FormatMarkdown, MarkdownMarp: false,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Remove(res.OutPath) })
+}
+
 func TestSubprocessConverter_PNGFlagsForwarded(t *testing.T) {
 	bin := fakeBinScript(t, `
 out=""
