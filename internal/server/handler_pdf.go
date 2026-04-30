@@ -138,17 +138,11 @@ func extensionFromContentType(ct string) string {
 
 // isPresentationContentType reports whether ct identifies a presentation
 // format LO recognises. Used by the markdown handler to auto-enable Marp
-// output. Kept adjacent to extensionFromContentType so the two share a
-// single source of truth for "what counts as a presentation".
+// output. Delegates to extensionFromContentType so both stay in lockstep
+// when new presentation MIME types are added.
 func isPresentationContentType(ct string) bool {
-	mt, _, err := mime.ParseMediaType(ct)
-	if err != nil {
-		return false
-	}
-	switch mt {
-	case "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-		"application/vnd.oasis.opendocument.presentation",
-		"application/vnd.ms-powerpoint":
+	switch extensionFromContentType(ct) {
+	case ".pptx", ".odp", ".ppt":
 		return true
 	}
 	return false

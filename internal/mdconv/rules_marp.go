@@ -34,29 +34,31 @@ func injectMarpSlideBreaks(html []byte) []byte {
 // the source — are dropped so the output never contains adjacent
 // separators.
 func applyMarp(md []byte) []byte {
-	indices := slideBreakRE.FindAllIndex(md, -1)
-	var segments [][]byte
-	cursor := 0
-	for _, m := range indices {
-		seg := bytes.TrimSpace(md[cursor:m[0]])
-		if len(seg) > 0 {
-			segments = append(segments, seg)
-		}
-		cursor = m[1]
-	}
-	tail := bytes.TrimSpace(md[cursor:])
-	if len(tail) > 0 {
-		segments = append(segments, tail)
-	}
+	const frontMatter = "---\nmarp: true\n---\n\n"
+	const sep = "\n\n---\n\n"
 
 	var buf bytes.Buffer
-	buf.WriteString("---\nmarp: true\n---\n\n")
-	for i, seg := range segments {
-		if i > 0 {
-			buf.WriteString("\n\n---\n\n")
+	buf.Grow(len(md) + len(frontMatter) + 1)
+	buf.WriteString(frontMatter)
+
+	cursor := 0
+	wrote := false
+	emit := func(seg []byte) {
+		if len(seg) == 0 {
+			return
+		}
+		if wrote {
+			buf.WriteString(sep)
 		}
 		buf.Write(seg)
+		wrote = true
 	}
+	for _, m := range slideBreakRE.FindAllIndex(md, -1) {
+		emit(bytes.TrimSpace(md[cursor:m[0]]))
+		cursor = m[1]
+	}
+	emit(bytes.TrimSpace(md[cursor:]))
+
 	buf.WriteByte('\n')
 	return buf.Bytes()
 }

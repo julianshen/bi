@@ -56,56 +56,34 @@ func TestMarkdownRejectsUnknownImagesMode(t *testing.T) {
 	}
 }
 
-func TestMarkdownAutoEnablesMarpForPPTX(t *testing.T) {
-	conv := &fakeConverter{body: []byte("# H"), mime: "text/markdown"}
-	h := server.New(server.Deps{Conv: conv, MaxUploadBytes: 1 << 20})
-	srv := httptest.NewServer(h.Routes())
-	t.Cleanup(srv.Close)
-
-	req, _ := http.NewRequest("POST", srv.URL+"/v1/convert/markdown", strings.NewReader("x"))
-	req.Header.Set("Content-Type", "application/vnd.openxmlformats-officedocument.presentationml.presentation")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatal(err)
+func TestMarkdownAutoMarpByContentType(t *testing.T) {
+	cases := []struct {
+		name string
+		ct   string
+		want bool
+	}{
+		{"pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation", true},
+		{"odp", "application/vnd.oasis.opendocument.presentation", true},
+		{"ppt", "application/vnd.ms-powerpoint", true},
+		{"docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", false},
 	}
-	resp.Body.Close()
-	if !conv.got.MarkdownMarp {
-		t.Errorf("MarkdownMarp = false, want true (pptx input should auto-enable Marp)")
-	}
-}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			conv := &fakeConverter{body: []byte("# H"), mime: "text/markdown"}
+			h := server.New(server.Deps{Conv: conv, MaxUploadBytes: 1 << 20})
+			srv := httptest.NewServer(h.Routes())
+			t.Cleanup(srv.Close)
 
-func TestMarkdownAutoEnablesMarpForODP(t *testing.T) {
-	conv := &fakeConverter{body: []byte("# H"), mime: "text/markdown"}
-	h := server.New(server.Deps{Conv: conv, MaxUploadBytes: 1 << 20})
-	srv := httptest.NewServer(h.Routes())
-	t.Cleanup(srv.Close)
-
-	req, _ := http.NewRequest("POST", srv.URL+"/v1/convert/markdown", strings.NewReader("x"))
-	req.Header.Set("Content-Type", "application/vnd.oasis.opendocument.presentation")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	resp.Body.Close()
-	if !conv.got.MarkdownMarp {
-		t.Errorf("MarkdownMarp = false, want true (odp input should auto-enable Marp)")
-	}
-}
-
-func TestMarkdownDisablesMarpForDOCX(t *testing.T) {
-	conv := &fakeConverter{body: []byte("# H"), mime: "text/markdown"}
-	h := server.New(server.Deps{Conv: conv, MaxUploadBytes: 1 << 20})
-	srv := httptest.NewServer(h.Routes())
-	t.Cleanup(srv.Close)
-
-	req, _ := http.NewRequest("POST", srv.URL+"/v1/convert/markdown", strings.NewReader("x"))
-	req.Header.Set("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	resp.Body.Close()
-	if conv.got.MarkdownMarp {
-		t.Errorf("MarkdownMarp = true, want false (docx input should not enable Marp)")
+			req, _ := http.NewRequest("POST", srv.URL+"/v1/convert/markdown", strings.NewReader("x"))
+			req.Header.Set("Content-Type", c.ct)
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			resp.Body.Close()
+			if conv.got.MarkdownMarp != c.want {
+				t.Errorf("MarkdownMarp = %v, want %v for %s", conv.got.MarkdownMarp, c.want, c.ct)
+			}
+		})
 	}
 }
