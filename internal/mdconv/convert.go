@@ -30,5 +30,8 @@ func ConvertWithBase(html []byte, opts Options, base string) ([]byte, error) {
 	}
 	out := normaliseHeadings([]byte(md))
 	out = applyImageMode(out, opts.Images, base)
+	if opts.Marp {
+		out = applyMarp(out)
+	}
 	return out, nil
 }
