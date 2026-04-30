@@ -16,6 +16,8 @@ func main() {
 		runServe(os.Args[2:])
 	case "healthcheck":
 		runHealthcheck(os.Args[2:])
+	case "convert":
+		runConvert(os.Args[2:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown subcommand: %q\n", os.Args[1])
 		os.Exit(2)

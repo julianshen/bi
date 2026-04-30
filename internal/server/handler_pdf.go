@@ -36,8 +36,10 @@ func (s *Server) handleConversion(w http.ResponseWriter, r *http.Request, job wo
 		WriteProblem(w, r.URL.Path, RequestIDFrom(r.Context()), err)
 		return
 	}
-	defer os.Remove(tmp.Name())
-	if _, err := io.Copy(tmp, r.Body); err != nil {
+	tmpName := tmp.Name()
+	defer os.Remove(tmpName)
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
 		tmp.Close()
 		var maxErr *http.MaxBytesError
 		if errors.As(err, &maxErr) {
@@ -47,9 +49,14 @@ func (s *Server) handleConversion(w http.ResponseWriter, r *http.Request, job wo
 		WriteProblem(w, r.URL.Path, RequestIDFrom(r.Context()), err)
 		return
 	}
+	if _, err := tmp.Write(body); err != nil {
+		tmp.Close()
+		WriteProblem(w, r.URL.Path, RequestIDFrom(r.Context()), err)
+		return
+	}
 	tmp.Close()
 
-	job.InPath = tmp.Name()
+	job.InPath = tmpName
 	res, err := s.deps.Conv.Run(r.Context(), job)
 	if err != nil {
 		WriteProblem(w, r.URL.Path, RequestIDFrom(r.Context()), err)

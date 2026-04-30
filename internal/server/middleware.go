@@ -94,8 +94,16 @@ func AccessLog(logger *slog.Logger) func(http.Handler) http.Handler {
 			start := time.Now()
 			rec := &statusRecorder{ResponseWriter: w, status: 200}
 
+			// Replace with [REDACTED] only when a password was actually
+			// sent — otherwise downstream handlers would read the
+			// placeholder as a real password and pass it to the
+			// converter, breaking unauthenticated requests (root cause
+			// of issue #3 — LO would refuse to load with a wrong
+			// password and crash the conversion).
 			redacted := r.Header.Get("X-Bi-Password") != ""
-			r.Header.Set("X-Bi-Password", "[REDACTED]")
+			if redacted {
+				r.Header.Set("X-Bi-Password", "[REDACTED]")
+			}
 
 			next.ServeHTTP(rec, r)
 

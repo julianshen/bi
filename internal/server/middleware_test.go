@@ -12,6 +12,27 @@ import (
 	"github.com/julianshen/bi/internal/server"
 )
 
+// TestAccessLogDoesNotForgePasswordHeader pins that the access-log
+// middleware doesn't set X-Bi-Password to "[REDACTED]" when no header
+// was sent. The earlier unconditional set caused the converter to read
+// "[REDACTED]" as the document password and hand it to LO, producing
+// an "Unspecified Application Error" — issue #3 root cause.
+func TestAccessLogDoesNotForgePasswordHeader(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+	var seen string
+	h := server.AccessLog(logger)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = r.Header.Get("X-Bi-Password")
+		w.WriteHeader(200)
+	}))
+	req := httptest.NewRequest("POST", "/v1/convert/pdf", strings.NewReader("x"))
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	if seen != "" {
+		t.Errorf("downstream X-Bi-Password = %q, want empty (no header was sent)", seen)
+	}
+}
+
 func TestRequestIDMiddlewareSetsHeader(t *testing.T) {
 	called := false
 	h := server.RequestID(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
