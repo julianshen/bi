@@ -24,6 +24,7 @@ func TestConvertGolden(t *testing.T) {
 		{"marp-no-slides", true},
 		{"marp-empty-slide", true},
 		{"marp-with-image", true},
+		{"marp-lo-pagebreak", true},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
