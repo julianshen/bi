@@ -13,7 +13,6 @@ import (
 
 	"github.com/julianshen/bi/internal/config"
 	"github.com/julianshen/bi/internal/server"
-	"github.com/julianshen/bi/internal/worker"
 )
 
 func runServe(_ []string) {
@@ -34,17 +33,19 @@ func runServe(_ []string) {
 		cfg.LOKPath = path
 	}
 
-	pool, err := worker.New(worker.Config{
-		LOKPath:        cfg.LOKPath,
-		Workers:        cfg.Workers,
-		QueueDepth:     cfg.QueueDepth,
-		ConvertTimeout: cfg.ConvertTimeout,
-	})
+	// Each conversion runs in a child `bi convert` process so a LO/cgo
+	// crash isolates to one request instead of taking down the server
+	// (issue #3). The HTTP path never loads lok in-process.
+	exe, err := os.Executable()
 	if err != nil {
-		logger.Error("worker init", "err", err)
+		logger.Error("locate self", "err", err)
 		os.Exit(1)
 	}
-	defer pool.Close()
+	conv := &server.SubprocessConverter{
+		BinPath: exe,
+		LOKPath: cfg.LOKPath,
+		Timeout: cfg.ConvertTimeout,
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -58,7 +59,7 @@ func runServe(_ []string) {
 	srv := &http.Server{
 		Addr: cfg.ListenAddr,
 		Handler: server.New(server.Deps{
-			Conv:           pool,
+			Conv:           conv,
 			Logger:         logger,
 			APIToken:       cfg.APIToken,
 			MaxUploadBytes: cfg.MaxUploadBytes,
