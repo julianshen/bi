@@ -44,5 +44,9 @@ COPY . .
 # resulting profile is incompatible with the integration build.
 RUN go vet ./... \
  && gofmt -s -l . | (! grep .) \
- && go test -tags=integration -race ./... \
+ && go test -race ./... \
+ && go test -tags=integration ./... \
  && make cover-gate
+# Race detector runs on the pure-Go suite; the integration build excludes
+# -race because LO/cgo corrupts glibc heap state across conversions and
+# the race finalizer trips at process exit (tests pass but exit crashes).
