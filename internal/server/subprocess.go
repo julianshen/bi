@@ -67,6 +67,9 @@ func (s *SubprocessConverter) Run(ctx context.Context, job worker.Job) (worker.R
 		}
 		args = append(args, "-images", mode)
 	}
+	if job.MarkdownMarp {
+		args = append(args, "-marp")
+	}
 	if s.Timeout > 0 {
 		args = append(args, "-timeout", s.Timeout.String())
 	}

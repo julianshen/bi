@@ -167,6 +167,41 @@ func TestSubprocessConverter_WrapNoDetail(t *testing.T) {
 	}
 }
 
+func TestSubprocessConverter_MarpFlagForwarded(t *testing.T) {
+	bin := fakeBinScript(t, `
+out=""
+next_out=0
+saw_marp=0
+for a in "$@"; do
+  if [ "$next_out" = "1" ]; then out="$a"; next_out=0; continue; fi
+  case "$a" in
+    -out) next_out=1 ;;
+    -marp) saw_marp=1 ;;
+  esac
+done
+: > "$out"
+if [ "$saw_marp" = "1" ]; then
+  echo '{"mime":"text/markdown","total_pages":0}'
+else
+  echo '{"error":"internal","detail":"-marp flag not forwarded"}'
+  exit 1
+fi
+`)
+	in := filepath.Join(t.TempDir(), "in.pptx")
+	os.WriteFile(in, []byte("x"), 0o600)
+	c := &SubprocessConverter{BinPath: bin, Timeout: 5 * time.Second}
+	res, err := c.Run(context.Background(), worker.Job{
+		InPath: in, Format: worker.FormatMarkdown, MarkdownMarp: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Remove(res.OutPath) })
+	if res.MIME != "text/markdown" {
+		t.Errorf("MIME = %q", res.MIME)
+	}
+}
+
 func TestSubprocessConverter_PNGFlagsForwarded(t *testing.T) {
 	bin := fakeBinScript(t, `
 out=""

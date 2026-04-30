@@ -22,6 +22,7 @@ func (s *Server) convertMarkdown(w http.ResponseWriter, r *http.Request) {
 	s.handleConversion(w, r, worker.Job{
 		Format:         worker.FormatMarkdown,
 		MarkdownImages: mode,
+		MarkdownMarp:   isPresentationContentType(r.Header.Get("Content-Type")),
 		Password:       r.Header.Get("X-Bi-Password"),
 	})
 }
