@@ -21,6 +21,9 @@ func TestConvertGolden(t *testing.T) {
 		{"image-drop", false},
 		{"lo-noise", false},
 		{"marp-simple", true},
+		{"marp-no-slides", true},
+		{"marp-empty-slide", true},
+		{"marp-with-image", true},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -30,7 +33,7 @@ func TestConvertGolden(t *testing.T) {
 			if c.name == "image-drop" {
 				opts.Images = mdconv.ImagesDrop
 			}
-			if c.name == "image-embed" || c.name == "image-drop" {
+			if c.name == "image-embed" || c.name == "image-drop" || c.name == "marp-with-image" {
 				seedSiblingImage(t, "testdata/x.png", "PNGFAKE")
 				t.Cleanup(func() { _ = os.Remove("testdata/x.png") })
 				gotMD, err := mdconv.ConvertWithBase(html, opts, "testdata")
