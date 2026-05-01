@@ -15,9 +15,11 @@ type fakeConverter struct {
 	mime  string
 	pages int
 	err   error
+	calls int
 }
 
 func (f *fakeConverter) Run(ctx context.Context, job worker.Job) (worker.Result, error) {
+	f.calls++
 	f.got = job
 	if f.err != nil {
 		return worker.Result{}, f.err
