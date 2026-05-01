@@ -38,7 +38,7 @@ func (p *Pool) runMarkdown(ctx context.Context, job Job) (Result, error) {
 	if err != nil {
 		return Result{}, fmt.Errorf("worker: read html: %w", err)
 	}
-	mdBytes, err := p.md.Convert(htmlBytes, job.MarkdownImages, filepath.Dir(htmlPath))
+	mdBytes, err := p.md.Convert(htmlBytes, job.MarkdownImages, filepath.Dir(htmlPath), job.MarkdownMarp)
 	if err != nil {
 		return Result{}, fmt.Errorf("%w: %w", ErrMarkdownConversion, err)
 	}

@@ -22,5 +22,5 @@ type lokDocument interface {
 // HTML file lives in, used to resolve relative <img src> against LO's
 // sibling-file image export.
 type htmlToMarkdown interface {
-	Convert(html []byte, images MarkdownImageMode, base string) ([]byte, error)
+	Convert(html []byte, images MarkdownImageMode, base string, marp bool) ([]byte, error)
 }

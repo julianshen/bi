@@ -23,6 +23,12 @@ func Convert(html []byte, opts Options) ([]byte, error) {
 
 // ConvertWithBase resolves relative image references against base.
 func ConvertWithBase(html []byte, opts Options, base string) ([]byte, error) {
+	// injectMarpSlideBreaks must run before scrubLONoise — the latter
+	// strips the style="page-break-before:..." attribute the former
+	// keys on. Reordering silently disables slide splitting.
+	if opts.Marp {
+		html = injectMarpSlideBreaks(html)
+	}
 	html = scrubLONoise(html)
 	md, err := defaultConv.ConvertString(string(html))
 	if err != nil {
@@ -30,5 +36,8 @@ func ConvertWithBase(html []byte, opts Options, base string) ([]byte, error) {
 	}
 	out := normaliseHeadings([]byte(md))
 	out = applyImageMode(out, opts.Images, base)
+	if opts.Marp {
+		out = applyMarp(out)
+	}
 	return out, nil
 }

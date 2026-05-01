@@ -54,6 +54,7 @@ type Job struct {
 	DPI            float64           // PNG only
 	Password       string            // empty if not encrypted
 	MarkdownImages MarkdownImageMode // markdown only
+	MarkdownMarp   bool              // markdown only; emit Marp front-matter
 }
 
 // Result describes the output of a successful conversion.

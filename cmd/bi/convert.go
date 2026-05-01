@@ -34,6 +34,7 @@ func runConvert(args []string) {
 	dpi := fs.Float64("dpi", 1.0, "DPI scale (PNG only)")
 	password := fs.String("password", "", "document password (optional)")
 	images := fs.String("images", "embed", "embed | drop (markdown only)")
+	marp := fs.Bool("marp", false, "emit Marp-style markdown (markdown only)")
 	timeout := fs.Duration("timeout", 120*time.Second, "max time for the conversion")
 	if err := fs.Parse(args); err != nil {
 		failConvert("bad-flags", err)
@@ -42,7 +43,7 @@ func runConvert(args []string) {
 		failConvert("bad-flags", errors.New("-in, -out, -format are required"))
 	}
 
-	job, err := buildJob(*in, *format, *page, *dpi, *password, *images)
+	job, err := buildJob(*in, *format, *page, *dpi, *password, *images, *marp)
 	if err != nil {
 		failConvert("bad-flags", err)
 	}
@@ -104,7 +105,7 @@ func runConvert(args []string) {
 // buildJob translates CLI flags into a worker.Job. Validation that's local
 // to this binary lives here; semantic validation (page range, dpi range)
 // happens inside worker.Run.
-func buildJob(in, format string, page int, dpi float64, password, images string) (worker.Job, error) {
+func buildJob(in, format string, page int, dpi float64, password, images string, marp bool) (worker.Job, error) {
 	job := worker.Job{InPath: in, Password: password}
 	switch strings.ToLower(format) {
 	case "pdf":
@@ -123,6 +124,7 @@ func buildJob(in, format string, page int, dpi float64, password, images string)
 		default:
 			return job, fmt.Errorf("invalid -images value %q", images)
 		}
+		job.MarkdownMarp = marp
 	default:
 		return job, fmt.Errorf("invalid -format value %q", format)
 	}

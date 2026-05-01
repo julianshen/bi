@@ -16,15 +16,17 @@ ENV CGO_ENABLED=1 \
 # The integration tests load LO too, so without this they would crash on the
 # first preempt that lands while LO C code is on stack.
 
-# Only writer + calc are exercised by the integration tests against
-# real LO. impress / draw aren't loaded by any test target, so we omit
-# them to keep the image small and the build fast. Production runtime
-# (Dockerfile) installs all four because real users upload pptx/odp/odg.
+# Install the LO app-targets needed by internal/worker/integration_test.go's
+# fixtures. Production runtime (Dockerfile) installs all four because real
+# users upload every format; here we trim to what the test suite loads to
+# keep the image small. When a new fixture format is added, install the
+# matching app-target alongside it.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
         libreoffice-core \
         libreoffice-writer \
         libreoffice-calc \
+        libreoffice-impress \
         ca-certificates \
         fonts-liberation \
         fonts-dejavu-core \
@@ -43,5 +45,9 @@ COPY . .
 # resulting profile is incompatible with the integration build.
 RUN go vet ./... \
  && gofmt -s -l . | (! grep .) \
- && go test -tags=integration -race ./... \
+ && go test -race ./... \
+ && go test -tags=integration ./... \
  && make cover-gate
+# Race detector runs on the pure-Go suite; the integration build excludes
+# -race because LO/cgo corrupts glibc heap state across conversions and
+# the race finalizer trips at process exit (tests pass but exit crashes).

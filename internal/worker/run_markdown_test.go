@@ -14,14 +14,16 @@ type fakeMD struct {
 	got    []byte
 	images MarkdownImageMode
 	base   string
+	marp   bool
 	out    []byte
 	err    error
 }
 
-func (f *fakeMD) Convert(html []byte, images MarkdownImageMode, base string) ([]byte, error) {
+func (f *fakeMD) Convert(html []byte, images MarkdownImageMode, base string, marp bool) ([]byte, error) {
 	f.got = append(f.got, html...)
 	f.images = images
 	f.base = base
+	f.marp = marp
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -65,9 +67,39 @@ func TestPoolRunMarkdownHappyPath(t *testing.T) {
 	if want := filepath.Dir(capturedHTMLPath); md.base != want {
 		t.Errorf("md.base = %q, want %q (filepath.Dir of html temp)", md.base, want)
 	}
+	if md.marp {
+		t.Errorf("md.marp = true, want false (default)")
+	}
 	got, _ := os.ReadFile(res.OutPath)
 	if string(got) != "# hello\n" {
 		t.Errorf("file = %q, want '# hello\\n'", got)
+	}
+}
+
+func TestPoolRunMarkdownPropagatesMarpFlag(t *testing.T) {
+	doc := &fakeDocument{parts: 1}
+	doc.saveAsHook = func(path, _, _ string) error {
+		return os.WriteFile(path, []byte("<p>hi</p>"), 0o600)
+	}
+	office := &fakeOffice{loadDoc: doc}
+	p, _ := newWithOffice(Config{Workers: 1, QueueDepth: 1, ConvertTimeout: time.Second}, office)
+	t.Cleanup(func() { _ = p.Close() })
+
+	md := &fakeMD{out: []byte("ok")}
+	p.setMarkdown(md)
+
+	in := tmpFile(t, "deck.pptx", []byte("x"))
+	_, err := p.Run(context.Background(), Job{
+		InPath:         in,
+		Format:         FormatMarkdown,
+		MarkdownMarp:   true,
+		MarkdownImages: MarkdownImagesEmbed,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !md.marp {
+		t.Error("md.marp = false, want true")
 	}
 }
 

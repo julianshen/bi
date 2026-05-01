@@ -10,16 +10,31 @@ import (
 )
 
 func TestConvertGolden(t *testing.T) {
-	cases := []string{"paragraph", "headings", "table", "image-embed", "image-drop", "lo-noise"}
-	for _, name := range cases {
-		t.Run(name, func(t *testing.T) {
-			html := mustRead(t, filepath.Join("testdata", name+".html"))
-			wantMD := mustRead(t, filepath.Join("testdata", name+".md"))
-			opts := mdconv.Options{Images: mdconv.ImagesEmbed}
-			if name == "image-drop" {
+	cases := []struct {
+		name string
+		marp bool
+	}{
+		{"paragraph", false},
+		{"headings", false},
+		{"table", false},
+		{"image-embed", false},
+		{"image-drop", false},
+		{"lo-noise", false},
+		{"marp-simple", true},
+		{"marp-no-slides", true},
+		{"marp-empty-slide", true},
+		{"marp-with-image", true},
+		{"marp-lo-pagebreak", true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			html := mustRead(t, filepath.Join("testdata", c.name+".html"))
+			wantMD := mustRead(t, filepath.Join("testdata", c.name+".md"))
+			opts := mdconv.Options{Images: mdconv.ImagesEmbed, Marp: c.marp}
+			if c.name == "image-drop" {
 				opts.Images = mdconv.ImagesDrop
 			}
-			if name == "image-embed" || name == "image-drop" {
+			if c.name == "image-embed" || c.name == "image-drop" || c.name == "marp-with-image" {
 				seedSiblingImage(t, "testdata/x.png", "PNGFAKE")
 				t.Cleanup(func() { _ = os.Remove("testdata/x.png") })
 				gotMD, err := mdconv.ConvertWithBase(html, opts, "testdata")

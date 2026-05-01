@@ -135,3 +135,14 @@ func extensionFromContentType(ct string) string {
 	}
 	return ""
 }
+
+// isPresentationContentType reports whether ct identifies a presentation
+// format LO recognises. Used by the markdown handler to auto-enable Marp
+// output for pptx/odp/ppt uploads.
+func isPresentationContentType(ct string) bool {
+	switch extensionFromContentType(ct) {
+	case ".pptx", ".odp", ".ppt":
+		return true
+	}
+	return false
+}

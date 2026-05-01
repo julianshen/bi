@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -45,7 +46,13 @@ func projectRoot(t *testing.T) string {
 	return ""
 }
 
-func TestRealConversionPDF(t *testing.T) {
+// TestRealConversion exercises the worker pool against a real LibreOffice
+// install. Subtests share a single Pool because lok permits only one
+// lok_init per process — creating multiple Pools in the same test binary
+// hangs Pool.Close on the second teardown. If you want to add another
+// real-LO test, add it as a subtest here rather than as a top-level
+// TestX function, otherwise CI will time out at the 600s test deadline.
+func TestRealConversion(t *testing.T) {
 	skipNoLOK(t)
 	cfg := worker.Config{
 		LOKPath:        os.Getenv("LOK_PATH"),
@@ -59,26 +66,55 @@ func TestRealConversionPDF(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = p.Close() })
 
-	res, err := p.Run(context.Background(), worker.Job{
-		InPath: loadFixture(t, "health.docx"),
-		Format: worker.FormatPDF,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Remove(res.OutPath) })
-	if res.MIME != "application/pdf" {
-		t.Errorf("MIME = %q", res.MIME)
-	}
-	body, err := os.ReadFile(res.OutPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(body) < 4 || string(body[:4]) != "%PDF" {
-		end := 20
-		if len(body) < end {
-			end = len(body)
+	t.Run("PDF", func(t *testing.T) {
+		res, err := p.Run(context.Background(), worker.Job{
+			InPath: loadFixture(t, "health.docx"),
+			Format: worker.FormatPDF,
+		})
+		if err != nil {
+			t.Fatal(err)
 		}
-		t.Errorf("output is not a PDF: %x", body[:end])
-	}
+		t.Cleanup(func() { _ = os.Remove(res.OutPath) })
+		if res.MIME != "application/pdf" {
+			t.Errorf("MIME = %q", res.MIME)
+		}
+		body, err := os.ReadFile(res.OutPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(body) < 4 || string(body[:4]) != "%PDF" {
+			end := 20
+			if len(body) < end {
+				end = len(body)
+			}
+			t.Errorf("output is not a PDF: %x", body[:end])
+		}
+	})
+
+	t.Run("MarkdownMarp", func(t *testing.T) {
+		res, err := p.Run(context.Background(), worker.Job{
+			InPath:         loadFixture(t, "health.pptx"),
+			Format:         worker.FormatMarkdown,
+			MarkdownImages: worker.MarkdownImagesEmbed,
+			MarkdownMarp:   true,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.Remove(res.OutPath) })
+
+		body, err := os.ReadFile(res.OutPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		s := string(body)
+		if !strings.HasPrefix(s, "---\nmarp: true\n---\n") {
+			t.Errorf("output missing Marp front-matter: %.200q", s)
+		}
+		// health.pptx has 2 slides → expect ≥2 occurrences of "\n---\n"
+		// (front-matter close + ≥1 between slides).
+		if c := strings.Count(s, "\n---\n"); c < 2 {
+			t.Errorf("expected ≥2 `---` lines (front-matter close + slide breaks); got %d in:\n%s", c, s)
+		}
+	})
 }

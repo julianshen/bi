@@ -9,4 +9,5 @@ const (
 
 type Options struct {
 	Images ImageMode
+	Marp   bool
 }
