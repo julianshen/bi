@@ -29,6 +29,11 @@ func (s *Server) handlePNGLike(w http.ResponseWriter, r *http.Request, defaultDP
 	})
 }
 
+const (
+	minDPI = 0.1
+	maxDPI = 4.0
+)
+
 func parsePNGParams(r *http.Request, defaultDPI float64) (page int, dpi float64, err error) {
 	dpi = defaultDPI
 	if v := r.URL.Query().Get("page"); v != "" {
@@ -41,6 +46,9 @@ func parsePNGParams(r *http.Request, defaultDPI float64) (page int, dpi float64,
 	if v := r.URL.Query().Get("dpi"); v != "" {
 		f, perr := strconv.ParseFloat(v, 64)
 		if perr != nil {
+			return 0, 0, ErrBadQuery{Param: "dpi", Value: v}
+		}
+		if f < minDPI || f > maxDPI {
 			return 0, 0, ErrBadQuery{Param: "dpi", Value: v}
 		}
 		dpi = f

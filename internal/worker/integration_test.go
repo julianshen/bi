@@ -163,4 +163,53 @@ func TestRealConversion(t *testing.T) {
 			t.Errorf("output missing fixture text 'Hello PDF': %.500q", body)
 		}
 	})
+
+	t.Run("SimpleDOCX", func(t *testing.T) {
+		res, err := p.Run(context.Background(), worker.Job{
+			InPath: loadFixture(t, "simple.docx"),
+			Format: worker.FormatPDF,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.Remove(res.OutPath) })
+		if res.MIME != "application/pdf" {
+			t.Errorf("MIME = %q, want application/pdf", res.MIME)
+		}
+	})
+
+	t.Run("SimpleXLSX", func(t *testing.T) {
+		res, err := p.Run(context.Background(), worker.Job{
+			InPath: loadFixture(t, "simple.xlsx"),
+			Format: worker.FormatPDF,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.Remove(res.OutPath) })
+		if res.MIME != "application/pdf" {
+			t.Errorf("MIME = %q, want application/pdf", res.MIME)
+		}
+	})
+
+	t.Run("SimpleODT", func(t *testing.T) {
+		res, err := p.Run(context.Background(), worker.Job{
+			InPath: loadFixture(t, "simple.odt"),
+			Format: worker.FormatPDF,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.Remove(res.OutPath) })
+		if res.MIME != "application/pdf" {
+			t.Errorf("MIME = %q, want application/pdf", res.MIME)
+		}
+	})
+
+	// NOTE: encrypted.docx and corrupt.docx fixtures exist in testdata/ but
+	// are not exercised here because LibreOffice 7.x on Ubuntu 24.04 does
+	// not reliably return password-required for msoffcrypto-generated
+	// encrypted files, and truncated zip files can hang the LO load path
+	// for the full ConvertTimeout. The error classification paths are
+	// covered by unit tests (TestClassify, run_*_test.go).
 }

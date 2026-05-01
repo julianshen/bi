@@ -5,11 +5,14 @@ import (
 	"net/http"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 )
+
+var tracer = otel.Tracer("github.com/julianshen/bi/internal/server")
 
 // InitTracing wires an OTLP/gRPC exporter using standard OTEL_* env and
 // returns a shutdown func to call at exit. Per-request spans come from

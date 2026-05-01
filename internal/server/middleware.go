@@ -93,6 +93,8 @@ func AccessLog(logger *slog.Logger) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			start := time.Now()
 			rec := &statusRecorder{ResponseWriter: w, status: 200}
+			ctx, meta := WithLogMeta(r.Context())
+			r = r.WithContext(ctx)
 
 			// Replace with [REDACTED] only when a password was actually
 			// sent — otherwise downstream handlers would read the
@@ -107,14 +109,38 @@ func AccessLog(logger *slog.Logger) func(http.Handler) http.Handler {
 
 			next.ServeHTTP(rec, r)
 
-			logger.LogAttrs(r.Context(), slog.LevelInfo, "request",
+			attrs := []slog.Attr{
 				slog.String("request_id", RequestIDFrom(r.Context())),
 				slog.String("method", r.Method),
 				slog.String("path", r.URL.Path),
 				slog.Int("status", rec.status),
 				slog.Int64("latency_ms", time.Since(start).Milliseconds()),
 				slog.Bool("password_present", redacted),
-			)
+			}
+			if meta != nil {
+				if meta.Format != "" {
+					attrs = append(attrs, slog.String("format", meta.Format))
+				}
+				if meta.InBytes > 0 {
+					attrs = append(attrs, slog.Int64("in_bytes", meta.InBytes))
+				}
+				if meta.OutBytes > 0 {
+					attrs = append(attrs, slog.Int64("out_bytes", meta.OutBytes))
+				}
+				if meta.TotalPages > 0 {
+					attrs = append(attrs, slog.Int("total_pages", meta.TotalPages))
+				}
+				if meta.Page > 0 || r.URL.Query().Get("page") != "" {
+					attrs = append(attrs, slog.Int("page", meta.Page))
+				}
+				if meta.QueueWaitMs > 0 {
+					attrs = append(attrs, slog.Int64("queue_wait_ms", meta.QueueWaitMs))
+				}
+				if meta.ConvertMs > 0 {
+					attrs = append(attrs, slog.Int64("convert_ms", meta.ConvertMs))
+				}
+			}
+			logger.LogAttrs(r.Context(), slog.LevelInfo, "request", attrs...)
 		})
 	}
 }

@@ -75,4 +75,5 @@ type Config struct {
 	Workers        int
 	QueueDepth     int
 	ConvertTimeout time.Duration
+	Inst           Instrumenter // optional; nil means no metrics
 }

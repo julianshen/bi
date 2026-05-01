@@ -26,7 +26,9 @@ func (p *Pool) runMarkdown(ctx context.Context, job Job) (Result, error) {
 		}
 		return writePDFMarkdownResult(text)
 	}
+	ctx, span := tracer.Start(ctx, "lok.load")
 	doc, err := p.office.Load(job.InPath, job.Password)
+	span.End()
 	if err != nil {
 		return Result{}, Classify(err)
 	}
@@ -40,14 +42,19 @@ func (p *Pool) runMarkdown(ctx context.Context, job Job) (Result, error) {
 	htmlFile.Close()
 	defer os.Remove(htmlPath)
 
-	if err := doc.SaveAs(htmlPath, "html", ""); err != nil {
+	ctx, span = tracer.Start(ctx, "lok.save_as")
+	err = doc.SaveAs(htmlPath, "html", "")
+	span.End()
+	if err != nil {
 		return Result{}, Classify(err)
 	}
 	htmlBytes, err := os.ReadFile(htmlPath)
 	if err != nil {
 		return Result{}, fmt.Errorf("worker: read html: %w", err)
 	}
+	ctx, span = tracer.Start(ctx, "mdconv.convert")
 	mdBytes, err := p.md.Convert(htmlBytes, job.MarkdownImages, filepath.Dir(htmlPath), job.MarkdownMarp)
+	span.End()
 	if err != nil {
 		return Result{}, fmt.Errorf("%w: %w", ErrMarkdownConversion, err)
 	}

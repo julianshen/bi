@@ -19,3 +19,6 @@ coverage.html
 go.work
 go.work.sum
 .claude/
+
+# Office temp files
+~$*
