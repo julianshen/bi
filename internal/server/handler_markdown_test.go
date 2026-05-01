@@ -87,3 +87,28 @@ func TestMarkdownAutoMarpByContentType(t *testing.T) {
 		})
 	}
 }
+
+func TestConvertMarkdownAcceptsPDFWithoutMarp(t *testing.T) {
+	conv := &fakeConverter{body: []byte("# H"), mime: "text/markdown"}
+	h := server.New(server.Deps{Conv: conv, MaxUploadBytes: 1 << 20})
+	srv := httptest.NewServer(h.Routes())
+	t.Cleanup(srv.Close)
+
+	req, _ := http.NewRequest("POST", srv.URL+"/v1/convert/markdown", strings.NewReader("%PDF-1.3"))
+	req.Header.Set("Content-Type", "application/pdf")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("status = %d, want 200", resp.StatusCode)
+	}
+	if conv.got.Format != worker.FormatMarkdown {
+		t.Errorf("Format = %v, want FormatMarkdown", conv.got.Format)
+	}
+	if conv.got.MarkdownMarp {
+		t.Errorf("MarkdownMarp = true, want false (PDFs are not presentations)")
+	}
+}

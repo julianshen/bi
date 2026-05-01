@@ -1,14 +1,24 @@
 # syntax=docker/dockerfile:1.7
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Stage 1 — build the Go binary against the same glibc as the runtime image.
+# Stage 1 — build the Go binary against Ubuntu glibc for PDF import support.
 # cgo is required because golibreofficekit/lok wraps the LOK C ABI.
+# Build on Ubuntu so the binary is compatible with PDF support libraries.
 # ─────────────────────────────────────────────────────────────────────────────
-FROM golang:1.25-bookworm AS build
+FROM ubuntu:24.04 AS build
 
 ENV CGO_ENABLED=1 \
     GOFLAGS="-trimpath" \
     GOPROXY=https://proxy.golang.org,direct
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+        golang-go \
+        build-essential \
+        ca-certificates \
+        pkg-config \
+        libx11-dev \
+ && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src
 
@@ -33,7 +43,7 @@ RUN go build -ldflags="-s -w" -o /out/bi ./cmd/bi
 # during a plain `docker build .` — which would happen because the legacy
 # builder walks every stage in the file regardless of --target.
 # ─────────────────────────────────────────────────────────────────────────────
-FROM debian:bookworm-slim AS runtime
+FROM ubuntu:24.04 AS runtime
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
@@ -42,6 +52,7 @@ RUN apt-get update \
         libreoffice-calc \
         libreoffice-impress \
         libreoffice-draw \
+        media-types \
         ca-certificates \
         fonts-liberation \
         fonts-dejavu-core \

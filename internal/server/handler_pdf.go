@@ -12,6 +12,10 @@ import (
 )
 
 func (s *Server) convertPDF(w http.ResponseWriter, r *http.Request) {
+	if isPDFContentType(r.Header.Get("Content-Type")) {
+		WriteProblem(w, r.URL.Path, RequestIDFrom(r.Context()), ErrPDFNotAcceptedAsInput)
+		return
+	}
 	s.handleConversion(w, r, worker.Job{
 		Format:   worker.FormatPDF,
 		Password: r.Header.Get("X-Bi-Password"),
@@ -121,6 +125,8 @@ func extensionFromContentType(ct string) string {
 		return ".xls"
 	case "application/vnd.ms-powerpoint":
 		return ".ppt"
+	case "application/pdf":
+		return ".pdf"
 	case "application/rtf", "text/rtf":
 		return ".rtf"
 	case "text/plain":
@@ -145,4 +151,9 @@ func isPresentationContentType(ct string) bool {
 		return true
 	}
 	return false
+}
+
+// isPDFContentType reports whether ct identifies a PDF body.
+func isPDFContentType(ct string) bool {
+	return extensionFromContentType(ct) == ".pdf"
 }

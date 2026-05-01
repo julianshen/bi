@@ -66,3 +66,25 @@ func TestPDFHandlerRejectsEmptyContentType(t *testing.T) {
 		t.Errorf("status = %d, want 415", resp.StatusCode)
 	}
 }
+
+func TestConvertPDFRejectsPDFInputAs415(t *testing.T) {
+	conv := &fakeConverter{body: []byte("ignored"), mime: "application/pdf"}
+	h := server.New(server.Deps{Conv: conv, MaxUploadBytes: 1 << 20})
+	srv := httptest.NewServer(h.Routes())
+	t.Cleanup(srv.Close)
+
+	req, _ := http.NewRequest("POST", srv.URL+"/v1/convert/pdf", strings.NewReader("%PDF-1.3"))
+	req.Header.Set("Content-Type", "application/pdf")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusUnsupportedMediaType {
+		t.Errorf("status = %d, want 415", resp.StatusCode)
+	}
+	if conv.calls != 0 {
+		t.Errorf("converter called %d times; PDF route must reject before dispatch", conv.calls)
+	}
+}

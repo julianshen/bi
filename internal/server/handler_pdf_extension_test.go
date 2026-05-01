@@ -16,6 +16,7 @@ func TestExtensionFromContentType(t *testing.T) {
 		{"application/msword", ".doc"},
 		{"application/vnd.ms-excel", ".xls"},
 		{"application/vnd.ms-powerpoint", ".ppt"},
+		{"application/pdf", ".pdf"},
 		{"application/rtf", ".rtf"},
 		{"text/rtf", ".rtf"},
 		{"text/plain", ".txt"},

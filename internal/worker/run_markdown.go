@@ -17,6 +17,15 @@ func (p *Pool) runMarkdown(ctx context.Context, job Job) (Result, error) {
 		// calling setMarkdown. Production New always sets mdAdapter{}.
 		return Result{}, errors.New("worker: markdown converter not wired")
 	}
+	// PDFs short-circuit: LO's pdfimport flattens pages to embedded
+	// images, so the doc.SaveAs("html") → mdconv path returns no text.
+	if isPDFInput(job.InPath) {
+		text, err := extractPDFText(job.InPath)
+		if err != nil {
+			return Result{}, fmt.Errorf("%w: %w", ErrMarkdownConversion, err)
+		}
+		return writePDFMarkdownResult(text)
+	}
 	doc, err := p.office.Load(job.InPath, job.Password)
 	if err != nil {
 		return Result{}, Classify(err)

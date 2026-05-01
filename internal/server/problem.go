@@ -20,8 +20,9 @@ type Problem struct {
 
 // Server-side sentinels that propagate to the problem mapper.
 var (
-	ErrMissingContentType = errors.New("missing Content-Type")
-	ErrPayloadTooLarge    = errors.New("payload too large")
+	ErrMissingContentType    = errors.New("missing Content-Type")
+	ErrPayloadTooLarge       = errors.New("payload too large")
+	ErrPDFNotAcceptedAsInput = errors.New("PDF input is not accepted on the PDF route; use /v1/convert/png or /v1/convert/markdown")
 )
 
 type problemMapping struct {
@@ -50,6 +51,8 @@ func mapError(err error) problemMapping {
 		return problemMapping{"bad-request", "Bad request", http.StatusBadRequest}
 	case errors.Is(err, ErrMissingContentType):
 		return problemMapping{"unsupported-media-type", "Content-Type required", http.StatusUnsupportedMediaType}
+	case errors.Is(err, ErrPDFNotAcceptedAsInput):
+		return problemMapping{"unsupported-media-type", "PDF input not accepted on this route", http.StatusUnsupportedMediaType}
 	case errors.Is(err, ErrPayloadTooLarge):
 		return problemMapping{"payload-too-large", "Payload too large", http.StatusRequestEntityTooLarge}
 	case errors.Is(err, context.DeadlineExceeded):
