@@ -13,6 +13,7 @@ import (
 
 	"github.com/julianshen/bi/internal/config"
 	"github.com/julianshen/bi/internal/server"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 func runServe(_ []string) {
@@ -41,10 +42,15 @@ func runServe(_ []string) {
 		logger.Error("locate self", "err", err)
 		os.Exit(1)
 	}
+
+	reg := prometheus.NewRegistry()
+	metrics := server.NewMetrics(reg)
+
 	conv := &server.SubprocessConverter{
 		BinPath: exe,
 		LOKPath: cfg.LOKPath,
 		Timeout: cfg.ConvertTimeout,
+		Metrics: metrics,
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -64,6 +70,9 @@ func runServe(_ []string) {
 			APIToken:       cfg.APIToken,
 			MaxUploadBytes: cfg.MaxUploadBytes,
 			ReadyzTTL:      cfg.ReadyzCacheTTL,
+			Registry:       reg,
+			Gatherer:       reg,
+			Metrics:        metrics,
 		}).Routes(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}

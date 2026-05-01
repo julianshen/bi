@@ -10,7 +10,9 @@ func (p *Pool) runPDF(ctx context.Context, job Job) (Result, error) {
 	if err := ctx.Err(); err != nil {
 		return Result{}, err
 	}
+	ctx, span := tracer.Start(ctx, "lok.load")
 	doc, err := p.office.Load(job.InPath, job.Password)
+	span.End()
 	if err != nil {
 		return Result{}, Classify(err)
 	}
@@ -28,7 +30,10 @@ func (p *Pool) runPDF(ctx context.Context, job Job) (Result, error) {
 		_ = os.Remove(outPath)
 		return Result{}, Classify(perr)
 	}
-	if err := doc.SaveAs(outPath, "pdf", ""); err != nil {
+	ctx, span = tracer.Start(ctx, "lok.save_as")
+	err = doc.SaveAs(outPath, "pdf", "")
+	span.End()
+	if err != nil {
 		_ = os.Remove(outPath)
 		return Result{}, Classify(err)
 	}

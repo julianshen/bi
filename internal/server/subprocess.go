@@ -33,6 +33,7 @@ type SubprocessConverter struct {
 	LOKPath string        // forwarded as $LOK_PATH to the child
 	TmpDir  string        // where to stage output files; empty = system default
 	Timeout time.Duration // per-conversion ceiling; child also enforces this
+	Metrics *Metrics      // optional; observed for conversion duration and LOK errors
 }
 
 // Run spawns `bi convert ...`, waits for it, and translates the child's
@@ -42,6 +43,7 @@ func (s *SubprocessConverter) Run(ctx context.Context, job worker.Job) (worker.R
 		return worker.Result{}, errors.New("subprocess: BinPath not set")
 	}
 
+	start := time.Now()
 	outPath, err := outputTempPath(s.TmpDir, job.Format)
 	if err != nil {
 		return worker.Result{}, err
@@ -107,6 +109,10 @@ func (s *SubprocessConverter) Run(ctx context.Context, job worker.Job) (worker.R
 
 	runErr := cmd.Run()
 
+	if s.Metrics != nil {
+		s.Metrics.Convert.WithLabelValues(job.Format.String()).Observe(time.Since(start).Seconds())
+	}
+
 	// The child's last stdout line is the JSON result envelope. Parse it
 	// regardless of exit code: success has metadata, failure has error
 	// classification. Any preceding stdout is logging, ignored here.
@@ -120,7 +126,14 @@ func (s *SubprocessConverter) Run(ctx context.Context, job worker.Job) (worker.R
 	if runErr != nil {
 		os.Remove(outPath)
 		if envelope.Error != "" {
-			return worker.Result{}, classifySubprocessErr(envelope.Error, envelope.Detail)
+			err := classifySubprocessErr(envelope.Error, envelope.Detail)
+			if s.Metrics != nil {
+				kind := worker.ErrorKind(err)
+				if kind != "" {
+					s.Metrics.LokErrorCounter.WithLabelValues(kind).Inc()
+				}
+			}
+			return worker.Result{}, err
 		}
 		// No structured error — child exited abnormally without printing
 		// the envelope (likely a crash). Surface stderr.

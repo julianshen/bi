@@ -18,7 +18,9 @@ func (p *Pool) runPNG(ctx context.Context, job Job) (Result, error) {
 	if job.DPI < minDPI || job.DPI > maxDPI {
 		return Result{}, ErrInvalidDPI
 	}
+	ctx, span := tracer.Start(ctx, "lok.load")
 	doc, err := p.office.Load(job.InPath, job.Password)
+	span.End()
 	if err != nil {
 		return Result{}, Classify(err)
 	}
@@ -32,10 +34,15 @@ func (p *Pool) runPNG(ctx context.Context, job Job) (Result, error) {
 		return Result{}, ErrPageOutOfRange
 	}
 
-	if err := doc.InitializeForRendering(""); err != nil {
+	ctx, span = tracer.Start(ctx, "lok.save_as")
+	err = doc.InitializeForRendering("")
+	span.End()
+	if err != nil {
 		return Result{}, Classify(err)
 	}
+	ctx, span = tracer.Start(ctx, "lok.render_png")
 	pngBytes, err := doc.RenderPagePNG(job.Page, job.DPI)
+	span.End()
 	if err != nil {
 		return Result{}, Classify(err)
 	}

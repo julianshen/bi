@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	mdconvpkg "github.com/julianshen/bi/internal/mdconv"
 )
@@ -22,14 +23,17 @@ type Pool struct {
 }
 
 type jobEnvelope struct {
-	ctx    context.Context
-	job    Job
-	result chan<- runOutcome
+	ctx         context.Context
+	job         Job
+	result      chan<- runOutcome
+	enqueueTime time.Time
 }
 
 type runOutcome struct {
-	res Result
-	err error
+	res         Result
+	err         error
+	queueWait   time.Duration
+	convertTime time.Duration
 }
 
 // newOffice is the office-constructor seam: production wires
@@ -80,9 +84,23 @@ func newWithOffice(cfg Config, office lokOffice) (*Pool, error) {
 func (p *Pool) runWorker() {
 	defer p.workers.Done()
 	for env := range p.queue {
+		if p.cfg.Inst != nil {
+			p.cfg.Inst.QueueDepth(len(p.queue))
+		}
+		queueWait := time.Since(env.enqueueTime)
+		if p.cfg.Inst != nil {
+			p.cfg.Inst.WorkerBusy(1)
+		}
+		convStart := time.Now()
 		res, err := p.execute(env.ctx, env.job)
+		convertTime := time.Since(convStart)
+		if p.cfg.Inst != nil {
+			p.cfg.Inst.WorkerBusy(-1)
+			p.cfg.Inst.QueueWait(env.job.Format, queueWait)
+			p.cfg.Inst.ConversionDuration(env.job.Format, convertTime)
+		}
 		select {
-		case env.result <- runOutcome{res, err}:
+		case env.result <- runOutcome{res, err, queueWait, convertTime}:
 		case <-env.ctx.Done():
 			if res.OutPath != "" {
 				_ = removeQuiet(res.OutPath)
@@ -93,16 +111,27 @@ func (p *Pool) runWorker() {
 
 // execute is the per-format dispatcher. Implementations live in run_*.go.
 func (p *Pool) execute(ctx context.Context, job Job) (Result, error) {
+	ctx, span := tracer.Start(ctx, "convert."+job.Format.String())
+	defer span.End()
+	var res Result
+	var err error
 	switch job.Format {
 	case FormatPDF:
-		return p.runPDF(ctx, job)
+		res, err = p.runPDF(ctx, job)
 	case FormatPNG:
-		return p.runPNG(ctx, job)
+		res, err = p.runPNG(ctx, job)
 	case FormatMarkdown:
-		return p.runMarkdown(ctx, job)
+		res, err = p.runMarkdown(ctx, job)
 	default:
-		return Result{}, fmt.Errorf("worker: unknown format %d", job.Format)
+		res, err = Result{}, fmt.Errorf("worker: unknown format %d", job.Format)
 	}
+	if err != nil && p.cfg.Inst != nil {
+		kind := ErrorKind(err)
+		if kind != "" {
+			p.cfg.Inst.LokError(kind)
+		}
+	}
+	return res, err
 }
 
 // Close stops accepting jobs, waits for in-flight work, then closes the
@@ -148,7 +177,7 @@ func (p *Pool) Run(ctx context.Context, job Job) (Result, error) {
 	defer cancel()
 
 	out := make(chan runOutcome, 1)
-	env := jobEnvelope{ctx: timeoutCtx, job: job, result: out}
+	env := jobEnvelope{ctx: timeoutCtx, job: job, result: out, enqueueTime: time.Now()}
 
 	// Hold closeMu across the enqueue so Close cannot close(p.queue)
 	// between the select's evaluation and the actual send. Without this,
@@ -158,18 +187,34 @@ func (p *Pool) Run(ctx context.Context, job Job) (Result, error) {
 		p.closeMu.Unlock()
 		return Result{}, ErrPoolClosed
 	}
+	if p.cfg.Inst != nil {
+		p.cfg.Inst.QueueDepth(len(p.queue) + 1)
+	}
 	select {
 	case p.queue <- env:
 		p.closeMu.Unlock()
 	default:
+		if p.cfg.Inst != nil {
+			p.cfg.Inst.QueueDepth(len(p.queue))
+		}
 		p.closeMu.Unlock()
 		return Result{}, ErrQueueFull
 	}
 
 	select {
 	case res := <-out:
+		if p.cfg.Inst != nil {
+			p.cfg.Inst.QueueDepth(len(p.queue))
+		}
+		if t := TimingFrom(ctx); t != nil {
+			t.QueueWaitMs = res.queueWait.Milliseconds()
+			t.ConvertMs = res.convertTime.Milliseconds()
+		}
 		return res.res, res.err
 	case <-timeoutCtx.Done():
+		if p.cfg.Inst != nil {
+			p.cfg.Inst.QueueDepth(len(p.queue))
+		}
 		return Result{}, timeoutCtx.Err()
 	}
 }
