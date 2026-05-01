@@ -7,16 +7,22 @@ import (
 
 // slideBreakRE matches a markdown horizontal rule on its own line.
 // After injectMarpSlideBreaks rewrites LO's page-break markers as <hr/>,
-// html-to-markdown renders them as "---", "***", or "* * *". Accept all.
+// html-to-markdown currently emits "---", "***", or "* * *" depending
+// on context. The pattern accepts the family rather than a closed list
+// so a library upgrade adding another HR style doesn't silently drop
+// slide splits — the cases are pinned in TestApplyMarpAcceptsAllHRForms.
 var slideBreakRE = regexp.MustCompile(`(?m)^\s*(?:-{3,}|\*{3,}|(?:\*\s*){3,})\s*$`)
 
-// pageBreakOpenTagRE matches any open tag whose style attribute contains
-// `page-break-before:always`. LO's html filter emits these (commonly as
-// `<h1 style="page-break-before:always; "></h1>`) between slides on
-// .pptx/.odp exports. RE2 lacks backreferences so we can't pair the open
-// tag with its matching close in one pattern; injectMarpSlideBreaks
-// rewrites the open tag to `<hr/>` and lets html-to-markdown discard the
-// orphaned (now empty) close tag — its parser is tolerant of that.
+// pageBreakOpenTagRE matches any open tag whose double-quoted style
+// attribute contains `page-break-before:always`. LO's html filter emits
+// these between slides on .pptx/.odp exports — tag name varies (we've
+// observed h1 and div); style position and surrounding properties also
+// vary. RE2 lacks backreferences so we can't pair the open tag with its
+// matching close in one pattern; injectMarpSlideBreaks rewrites the open
+// tag to `<hr/>` and relies on html-to-markdown to drop the orphaned
+// close tag (covered by the marp-lo-pagebreak fixture). Single-quoted
+// styles aren't handled — LO has only been observed emitting double
+// quotes; widen this if that changes.
 var pageBreakOpenTagRE = regexp.MustCompile(
 	`<[a-zA-Z0-9]+\b[^>]*\bstyle="[^"]*page-break-before:\s*always[^"]*"[^>]*>`,
 )
@@ -42,6 +48,10 @@ func applyMarp(md []byte) []byte {
 	buf.WriteString(frontMatter)
 
 	cursor := 0
+	// `wrote` suppresses a leading separator when early segments are
+	// empty (e.g. an HR at the very top of the body). Without it, an
+	// empty first segment followed by content would produce a deck
+	// starting with a stray "---" between front-matter and slide one.
 	wrote := false
 	emit := func(seg []byte) {
 		if len(seg) == 0 {

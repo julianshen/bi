@@ -16,10 +16,11 @@ ENV CGO_ENABLED=1 \
 # The integration tests load LO too, so without this they would crash on the
 # first preempt that lands while LO C code is on stack.
 
-# Integration tests exercise writer (docx → pdf/markdown) and impress
-# (pptx → marp markdown). Calc stays in for completeness; draw is omitted
-# since no test loads odg. Production runtime (Dockerfile) installs all
-# four because real users upload every format.
+# Install the LO app-targets needed by internal/worker/integration_test.go's
+# fixtures. Production runtime (Dockerfile) installs all four because real
+# users upload every format; here we trim to what the test suite loads to
+# keep the image small. When a new fixture format is added, install the
+# matching app-target alongside it.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
         libreoffice-core \

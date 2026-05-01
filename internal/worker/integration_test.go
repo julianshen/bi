@@ -49,7 +49,9 @@ func projectRoot(t *testing.T) string {
 // TestRealConversion exercises the worker pool against a real LibreOffice
 // install. Subtests share a single Pool because lok permits only one
 // lok_init per process — creating multiple Pools in the same test binary
-// hangs Pool.Close on the second teardown.
+// hangs Pool.Close on the second teardown. If you want to add another
+// real-LO test, add it as a subtest here rather than as a top-level
+// TestX function, otherwise CI will time out at the 600s test deadline.
 func TestRealConversion(t *testing.T) {
 	skipNoLOK(t)
 	cfg := worker.Config{
