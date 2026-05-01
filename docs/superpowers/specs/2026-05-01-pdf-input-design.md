@@ -1,10 +1,25 @@
 # PDF as input format — Design
 
-**Status:** Approved 2026-05-01. Ready for implementation planning.
+**Status:** Implemented 2026-05-01 with mid-flight architecture pivot.
 **Scope:** Accept `application/pdf` uploads on `/v1/convert/png` and
-`/v1/convert/markdown`. Reject on `/v1/convert/pdf`. Use LibreOffice's
-`libreoffice-pdfimport` extension so PDFs flow through the existing
-worker/lok pipeline unchanged.
+`/v1/convert/markdown`. Reject on `/v1/convert/pdf`.
+
+**Engine split (post-implementation note):** LibreOffice's pdfimport
+extension was the planned engine for both routes, but it flattens PDF
+pages to embedded images during load — the existing pdf → SaveAs("html")
+→ mdconv pipeline returned empty markdown. Per-route engines now:
+
+- **PNG:** LibreOffice (still loads PDFs as Draw documents and
+  re-rasterises the page to PNG). Runtime image switched from Debian
+  bookworm to Ubuntu 24.04 because Debian's `libreoffice-pdfimport`
+  package is no longer published.
+- **Markdown:** `github.com/ledongthuc/pdf` (BSD-3, fork of
+  `rsc.io/pdf`) extracts text directly. The handler stages the PDF to
+  a temp file with `.pdf` suffix; `runMarkdown` short-circuits before
+  `office.Load` based on that extension.
+
+Scanned/image-only PDFs still produce empty markdown — the limitation
+documented under non-goals just has a different proximate cause.
 
 ## Goals
 

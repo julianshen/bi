@@ -88,9 +88,9 @@ All routes are versioned under `/v1/`. Request bodies are raw document bytes
 
 | Route                                  | Method | Request body         | Response body       | Notes |
 |----------------------------------------|--------|----------------------|---------------------|-------|
-| `/v1/convert/pdf`                      | POST   | document bytes       | `application/pdf`   | Whole-document export. |
-| `/v1/convert/png?page=N&dpi=F`         | POST   | document bytes       | `image/png`         | Single page; `X-Total-Pages: M` always set. `page` 0-based, defaults to 0. `dpi` defaults to 1.0, range [0.1, 4.0]. |
-| `/v1/convert/markdown?images=embed\|drop` | POST | document bytes      | `text/markdown`     | Pipeline: LO → HTML → `mdconv`. `images` defaults to `embed`. Pptx/odp/ppt inputs auto-emit Marp markdown (front-matter + `---` slide separators). Other formats produce flat markdown unchanged. |
+| `/v1/convert/pdf`                      | POST   | document bytes       | `application/pdf`   | Whole-document export. **Rejects `application/pdf` request bodies with 415** — this route is "convert *to* PDF", not passthrough. |
+| `/v1/convert/png?page=N&dpi=F`         | POST   | document bytes       | `image/png`         | Single page; `X-Total-Pages: M` always set. `page` 0-based, defaults to 0. `dpi` defaults to 1.0, range [0.1, 4.0]. Accepts `application/pdf` (LO+pdfimport renders the page). |
+| `/v1/convert/markdown?images=embed\|drop` | POST | document bytes      | `text/markdown`     | Pipeline: LO → HTML → `mdconv` for office docs; **PDF inputs short-circuit through `github.com/ledongthuc/pdf` for text extraction** because LO's pdfimport flattens PDF pages to images. `images` defaults to `embed`. Pptx/odp/ppt inputs auto-emit Marp markdown (front-matter + `---` slide separators). Scanned/image-only PDFs produce empty markdown. |
 | `/v1/thumbnail?dpi=F`                  | POST   | document bytes       | `image/png`         | Equivalent to `/v1/convert/png?page=0&dpi=0.5` by default. `X-Total-Pages` set. |
 | `/healthz`                             | GET    | —                    | `text/plain`        | Liveness. 200 iff process responds. |
 | `/readyz`                              | GET    | —                    | `text/plain`        | Readiness. Runs a real conversion of the embedded fixture; 200 on success, 503 otherwise. Last result cached for `BI_READYZ_CACHE_TTL` (default 5 s). |
