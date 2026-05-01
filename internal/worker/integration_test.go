@@ -117,4 +117,50 @@ func TestRealConversion(t *testing.T) {
 			t.Errorf("expected ≥2 `---` lines (front-matter close + slide breaks); got %d in:\n%s", c, s)
 		}
 	})
+
+	t.Run("PDFInputPNG", func(t *testing.T) {
+		res, err := p.Run(context.Background(), worker.Job{
+			InPath: loadFixture(t, "health.pdf"),
+			Format: worker.FormatPNG,
+			Page:   0,
+			DPI:    1.0,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.Remove(res.OutPath) })
+		if res.MIME != "image/png" {
+			t.Errorf("MIME = %q, want image/png", res.MIME)
+		}
+		body, err := os.ReadFile(res.OutPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(body) < 8 || string(body[:8]) != "\x89PNG\r\n\x1a\n" {
+			end := 16
+			if len(body) < end {
+				end = len(body)
+			}
+			t.Errorf("output is not a PNG: %x", body[:end])
+		}
+	})
+
+	t.Run("PDFInputMarkdown", func(t *testing.T) {
+		res, err := p.Run(context.Background(), worker.Job{
+			InPath:         loadFixture(t, "health.pdf"),
+			Format:         worker.FormatMarkdown,
+			MarkdownImages: worker.MarkdownImagesEmbed,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.Remove(res.OutPath) })
+		body, err := os.ReadFile(res.OutPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(body), "Hello PDF") {
+			t.Errorf("output missing fixture text 'Hello PDF': %.500q", body)
+		}
+	})
 }

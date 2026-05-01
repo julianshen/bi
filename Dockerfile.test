@@ -5,7 +5,19 @@
 # Dockerfile so the legacy Docker builder (DOCKER_BUILDKIT=0) of the runtime
 # image doesn't drag the test stages along as a side effect.
 
-FROM golang:1.25-bookworm AS test
+# Build stage on Debian (compatible with golang:1.25 which uses Debian)
+FROM golang:1.25 AS builder
+
+ENV CGO_ENABLED=1 \
+    GOFLAGS="-trimpath" \
+    GOPROXY=https://proxy.golang.org,direct
+
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Runtime stage on Ubuntu (which has PDF support in libreoffice-core)
+FROM ubuntu:24.04 AS test
 
 ENV CGO_ENABLED=1 \
     GOFLAGS="-trimpath" \
@@ -16,21 +28,24 @@ ENV CGO_ENABLED=1 \
 # The integration tests load LO too, so without this they would crash on the
 # first preempt that lands while LO C code is on stack.
 
-# Install the LO app-targets needed by internal/worker/integration_test.go's
-# fixtures. Production runtime (Dockerfile) installs all four because real
-# users upload every format; here we trim to what the test suite loads to
-# keep the image small. When a new fixture format is added, install the
-# matching app-target alongside it.
+# Install build dependencies and LibreOffice
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
+        golang-go \
+        build-essential \
+        ca-certificates \
+        pkg-config \
+        libx11-dev \
         libreoffice-core \
         libreoffice-writer \
         libreoffice-calc \
         libreoffice-impress \
-        ca-certificates \
         fonts-liberation \
         fonts-dejavu-core \
  && rm -rf /var/lib/apt/lists/*
+
+# Copy Go cache from builder stage
+COPY --from=builder /go/pkg /go/pkg
 
 WORKDIR /src
 
