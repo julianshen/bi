@@ -40,6 +40,7 @@ RUN apt-get update \
         libreoffice-writer \
         libreoffice-calc \
         libreoffice-impress \
+        media-types \
         fonts-liberation \
         fonts-dejavu-core \
  && rm -rf /var/lib/apt/lists/*

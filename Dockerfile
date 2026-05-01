@@ -52,6 +52,7 @@ RUN apt-get update \
         libreoffice-calc \
         libreoffice-impress \
         libreoffice-draw \
+        media-types \
         ca-certificates \
         fonts-liberation \
         fonts-dejavu-core \
