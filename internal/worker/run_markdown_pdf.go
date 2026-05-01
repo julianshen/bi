@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/ledongthuc/pdf"
@@ -53,20 +54,10 @@ func extractPDFText(path string) ([]byte, error) {
 
 // isPDFInput reports whether the staged input file is a PDF. The
 // handler stages uploads with extensions chosen by extensionFromContentType;
-// .pdf is the contract for application/pdf bodies.
+// .pdf is the contract for application/pdf bodies. Case-insensitive
+// guard for resilience against future stagers that don't normalise.
 func isPDFInput(inPath string) bool {
-	return strings.EqualFold(filepathExt(inPath), ".pdf")
-}
-
-// filepathExt is filepath.Ext inlined so this file has one fewer
-// import line. Matches stdlib behaviour byte-for-byte for our case.
-func filepathExt(path string) string {
-	for i := len(path) - 1; i >= 0 && path[i] != '/'; i-- {
-		if path[i] == '.' {
-			return path[i:]
-		}
-	}
-	return ""
+	return strings.EqualFold(filepath.Ext(inPath), ".pdf")
 }
 
 // writePDFMarkdownResult is the shared tail used by runMarkdown when
