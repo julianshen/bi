@@ -121,6 +121,8 @@ func extensionFromContentType(ct string) string {
 		return ".xls"
 	case "application/vnd.ms-powerpoint":
 		return ".ppt"
+	case "application/pdf":
+		return ".pdf"
 	case "application/rtf", "text/rtf":
 		return ".rtf"
 	case "text/plain":
