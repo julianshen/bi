@@ -153,8 +153,7 @@ func isPresentationContentType(ct string) bool {
 	return false
 }
 
-// isPDFContentType reports whether ct identifies a PDF body. Used by
-// convertPDF to reject PDF→PDF on the "convert *to* PDF" route.
+// isPDFContentType reports whether ct identifies a PDF body.
 func isPDFContentType(ct string) bool {
 	return extensionFromContentType(ct) == ".pdf"
 }

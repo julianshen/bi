@@ -21,6 +21,31 @@ func TestExtractPDFText(t *testing.T) {
 	}
 }
 
+// TestExtractPDFTextMultiPage exercises the inter-page separator
+// branch (the single-page health.pdf fixture cannot). A regression
+// that drops the blank-line separator or reorders pages would smush
+// "Page One Body" and "Page Two Body" together.
+func TestExtractPDFTextMultiPage(t *testing.T) {
+	path := filepath.Join("..", "..", "testdata", "multi-page.pdf")
+	got, err := extractPDFText(path)
+	if err != nil {
+		t.Fatalf("extractPDFText: %v", err)
+	}
+	s := string(got)
+	idx1 := strings.Index(s, "Page One Body")
+	idx2 := strings.Index(s, "Page Two Body")
+	if idx1 < 0 || idx2 < 0 {
+		t.Fatalf("expected both page bodies in output; got %q", s)
+	}
+	if idx1 >= idx2 {
+		t.Errorf("expected page 1 before page 2; got %q", s)
+	}
+	between := s[idx1+len("Page One Body") : idx2]
+	if !strings.Contains(between, "\n\n") {
+		t.Errorf("missing blank-line separator between pages; got %q", between)
+	}
+}
+
 func TestExtractPDFTextMissingFile(t *testing.T) {
 	_, err := extractPDFText("does-not-exist.pdf")
 	if err == nil {
@@ -65,6 +90,31 @@ func TestPoolRunMarkdownPDFShortCircuit(t *testing.T) {
 		t.Errorf("output missing extracted text; got %q", body)
 	}
 }
+
+func TestIsEncryptedPDFErr(t *testing.T) {
+	cases := map[string]bool{
+		"":                               false,
+		"some random error":              false,
+		"file is encrypted":              true,
+		"PDF requires a password":        true,
+		"Encrypted document, can't open": true,
+		"failed to decode XREF":          false,
+		"PASSWORD REQUIRED":              true,
+	}
+	for msg, want := range cases {
+		var err error
+		if msg != "" {
+			err = errString(msg)
+		}
+		if got := isEncryptedPDFErr(err); got != want {
+			t.Errorf("isEncryptedPDFErr(%q) = %v, want %v", msg, got, want)
+		}
+	}
+}
+
+type errString string
+
+func (e errString) Error() string { return string(e) }
 
 func TestIsPDFInput(t *testing.T) {
 	cases := map[string]bool{

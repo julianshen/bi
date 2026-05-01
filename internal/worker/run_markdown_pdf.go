@@ -11,17 +11,27 @@ import (
 )
 
 // extractPDFText extracts visible text from a PDF using a Go-native
-// reader. LibreOffice's pdfimport flattens PDF pages to images so the
-// existing pdf → html → markdown path cannot recover text — see the
-// design spec at docs/superpowers/specs/2026-05-01-pdf-input-design.md.
+// reader. LibreOffice's pdfimport flattens PDF pages to embedded
+// images on load, so the existing pdf → html → markdown path cannot
+// recover text.
 //
-// The output is plain text with one line per visual row and a blank
-// line between pages. That is already valid markdown (paragraphs
-// separated by blanks). Scanned/image-only PDFs surface as empty
-// output, matching the documented limitation.
+// Output is plain text: one line per visual row, blank line between
+// pages. Scanned/image-only PDFs surface as empty output (no OCR);
+// callers that send markdown metacharacters in PDF body text get them
+// passed through unescaped — text/markdown here is "best-effort plain
+// text", not a strict CommonMark guarantee.
+//
+// Encrypted PDFs are not supported on this path: ledongthuc/pdf does
+// not accept a password, so job.Password (which works on the LO path
+// for office docs) is ignored here. We detect encryption from the
+// library's error string and surface ErrPasswordRequired so clients
+// get a 422 instead of an opaque 5xx.
 func extractPDFText(path string) ([]byte, error) {
 	f, r, err := pdf.Open(path)
 	if err != nil {
+		if isEncryptedPDFErr(err) {
+			return nil, fmt.Errorf("%w: encrypted PDFs are not supported on the markdown route", ErrPasswordRequired)
+		}
 		return nil, fmt.Errorf("worker: open pdf: %w", err)
 	}
 	defer f.Close()
@@ -52,17 +62,26 @@ func extractPDFText(path string) ([]byte, error) {
 	return bytes.TrimSpace(buf.Bytes()), nil
 }
 
-// isPDFInput reports whether the staged input file is a PDF. The
-// handler stages uploads with extensions chosen by extensionFromContentType;
-// .pdf is the contract for application/pdf bodies. Case-insensitive
-// guard for resilience against future stagers that don't normalise.
+// isPDFInput reports whether the staged input file is a PDF. Inputs
+// are staged with an extension matching their declared Content-Type;
+// .pdf indicates application/pdf. Case-insensitive guard against
+// non-normalising stagers.
 func isPDFInput(inPath string) bool {
 	return strings.EqualFold(filepath.Ext(inPath), ".pdf")
 }
 
-// writePDFMarkdownResult is the shared tail used by runMarkdown when
-// the input is a PDF. Kept here so run_markdown.go stays focused on
-// the LO pipeline.
+// isEncryptedPDFErr matches the substrings ledongthuc/pdf surfaces
+// when opening encrypted documents. The library does not expose a
+// typed error for this case; pin the strings the upstream emits as of
+// v0.0.0-20250511 so the test catches a wording change.
+func isEncryptedPDFErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "encrypt") || strings.Contains(msg, "password")
+}
+
 func writePDFMarkdownResult(text []byte) (Result, error) {
 	out, err := os.CreateTemp("", "bi-*.md")
 	if err != nil {

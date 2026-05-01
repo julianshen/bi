@@ -19,7 +19,6 @@ func (p *Pool) runMarkdown(ctx context.Context, job Job) (Result, error) {
 	}
 	// PDFs short-circuit: LO's pdfimport flattens pages to embedded
 	// images, so the doc.SaveAs("html") → mdconv path returns no text.
-	// Use a Go-native PDF reader instead.
 	if isPDFInput(job.InPath) {
 		text, err := extractPDFText(job.InPath)
 		if err != nil {

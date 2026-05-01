@@ -21,7 +21,7 @@ ENV CGO_ENABLED=1 \
 
 # Install the LO app-targets needed by internal/worker/integration_test.go's
 # fixtures plus the toolchain to build cgo. media-types provides /etc/mime.types
-# for extensionFromContentType's fallback lookups.
+# for the MIME-to-extension fallback lookup.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
         golang-go \
