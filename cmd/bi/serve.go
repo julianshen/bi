@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/julianshen/bi/internal/config"
+	"github.com/julianshen/bi/internal/ocr"
 	"github.com/julianshen/bi/internal/server"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -46,11 +47,21 @@ func runServe(_ []string) {
 	reg := prometheus.NewRegistry()
 	metrics := server.NewMetrics(reg)
 
+	ocrAvailable := false
+	if cfg.OCREnabled && cfg.OCRTessdataPath != "" {
+		if err := ocr.Probe(cfg.OCRTessdataPath, ocr.SupportedLangs); err != nil {
+			logger.Warn("ocr disabled", "err", err)
+		} else {
+			ocrAvailable = true
+		}
+	}
+
 	conv := &server.SubprocessConverter{
-		BinPath: exe,
-		LOKPath: cfg.LOKPath,
-		Timeout: cfg.ConvertTimeout,
-		Metrics: metrics,
+		BinPath:      exe,
+		LOKPath:      cfg.LOKPath,
+		Timeout:      cfg.ConvertTimeout,
+		Metrics:      metrics,
+		OCRAvailable: ocrAvailable,
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -73,6 +84,7 @@ func runServe(_ []string) {
 			Registry:       reg,
 			Gatherer:       reg,
 			Metrics:        metrics,
+			OCRAvailable:   ocrAvailable,
 		}).Routes(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}

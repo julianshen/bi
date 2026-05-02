@@ -29,11 +29,12 @@ import (
 //   - failure: exit non-zero, last stdout line is JSON {"error":"...","detail":"..."}
 //   - the error string maps back to a worker sentinel via classifySubprocessErr.
 type SubprocessConverter struct {
-	BinPath string        // path to the bi executable (typically os.Executable())
-	LOKPath string        // forwarded as $LOK_PATH to the child
-	TmpDir  string        // where to stage output files; empty = system default
-	Timeout time.Duration // per-conversion ceiling; child also enforces this
-	Metrics *Metrics      // optional; observed for conversion duration and LOK errors
+	BinPath      string        // path to the bi executable (typically os.Executable())
+	LOKPath      string        // forwarded as $LOK_PATH to the child
+	TmpDir       string        // where to stage output files; empty = system default
+	Timeout      time.Duration // per-conversion ceiling; child also enforces this
+	Metrics      *Metrics      // optional; observed for conversion duration and LOK errors
+	OCRAvailable bool          // mirrors Deps.OCRAvailable; informational, set by serve at boot
 }
 
 // buildSubprocessArgs constructs the argv for `bi convert` from a
