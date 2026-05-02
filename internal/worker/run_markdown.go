@@ -79,25 +79,18 @@ func (p *Pool) runMarkdownPDF(ctx context.Context, job Job) (Result, error) {
 		return Result{}, fmt.Errorf("%w: %w", ErrMarkdownConversion, err)
 	}
 
-	// No engine configured: behave exactly like the legacy path,
-	// joining pages with the existing two-newline separator.
-	if p.cfg.OCR == nil {
+	// No engine configured OR caller said "never": legacy path
+	// joining pages with the existing separator.
+	if p.cfg.OCR == nil || job.OCRMode == OCRNever {
 		joined := strings.Join(pages, "\n")
 		return writePDFMarkdownResult([]byte(strings.TrimSpace(joined)))
 	}
 
-	// Engine present: determine if OCR is needed.
-	// For OCRAuto on digital PDFs, if text extraction succeeds at all,
-	// consider it sufficient and skip OCR rendering (the no-op fast path).
-	// Only render pages if OCRAlways is requested or extraction completely failed.
-	needsOCR := job.OCRMode == OCRAlways
-	if !needsOCR {
-		// Text extraction was sufficient; no OCR needed.
-		joined := strings.Join(pages, "\n")
-		return writePDFMarkdownResult([]byte(strings.TrimSpace(joined)))
-	}
-
-	// Render pages for OCR.
+	// Engine present and OCR not disabled: load the doc so we can
+	// render pages that need OCR. Loading is unconditional even on
+	// fully-digital PDFs because we don't know which pages will need
+	// OCR until we walk them; the OCRAuto no-op fast path sees zero
+	// RenderPagePNG calls when every page has enough text.
 	doc, err := p.office.Load(job.InPath, job.Password)
 	if err != nil {
 		return Result{}, Classify(err)

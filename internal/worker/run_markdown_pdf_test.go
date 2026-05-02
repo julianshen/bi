@@ -156,7 +156,7 @@ func TestPoolRunMarkdownPDFWithOCREngineNoOpForDigitalPDF(t *testing.T) {
 	eng := &fakeOCR{}
 	cfg := Config{
 		Workers: 1, QueueDepth: 1, ConvertTimeout: time.Second,
-		OCR: eng, OCRTextThreshold: 16, OCRDPI: 300,
+		OCR: eng, OCRTextThreshold: 8, OCRDPI: 300, // low threshold: "Page One Body" is 13 chars, so no OCR needed
 	}
 	p, _ := newWithOffice(cfg, office)
 	t.Cleanup(func() { _ = p.Close() })
@@ -171,10 +171,54 @@ func TestPoolRunMarkdownPDFWithOCREngineNoOpForDigitalPDF(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Remove(res.OutPath) })
 	if len(eng.calls) != 0 {
-		t.Errorf("engine called for digital PDF: %d", len(eng.calls))
+		t.Errorf("engine called for digital PDF with sufficient text: %d", len(eng.calls))
 	}
 	body, _ := os.ReadFile(res.OutPath)
 	if !strings.Contains(string(body), "Page One Body") {
 		t.Errorf("missing extracted text: %q", body)
+	}
+}
+
+// TestPoolRunMarkdownPDFAutoMixedPages verifies that OCRAuto routes
+// through assembleMarkdownWithOCR so pages with no text layer get
+// OCR'd while text-bearing pages don't. This guards against a past
+// regression where OCRAuto bypassed OCR entirely.
+//
+// We can't easily synthesise a "scanned page" in a fixture without
+// LibreOffice; instead we use a fake document that returns empty
+// pages from extractPDFPages by overriding via an empty 2-page PDF.
+// Because we don't have such a fixture, we assert the OCR pipeline
+// is invoked (engine called at least once) when OCRAuto is set on
+// any non-empty input — i.e. the test fails if the function takes
+// the "skip OCR entirely" shortcut on OCRAuto.
+//
+// Construction: we set OCRTextThreshold high enough that every page
+// of multi-page.pdf falls under the threshold; that guarantees every
+// page becomes an OCR call.
+func TestPoolRunMarkdownPDFAutoForcesOCROnShortPages(t *testing.T) {
+	office := &fakeOffice{}
+	eng := &fakeOCR{textsByCall: []string{"OCR1", "OCR2"}}
+	cfg := Config{
+		Workers: 1, QueueDepth: 1, ConvertTimeout: time.Second,
+		OCR: eng, OCRTextThreshold: 100000, OCRDPI: 300, // huge threshold = every page goes through OCR
+	}
+	p, _ := newWithOffice(cfg, office)
+	t.Cleanup(func() { _ = p.Close() })
+	p.setMarkdown(&fakeMD{})
+
+	// fakeOffice.Load needs to succeed; default fakeDocument has parts=1, that's fine
+	// (we only need rendering not to error).
+
+	pdfPath := filepath.Join("..", "..", "testdata", "multi-page.pdf")
+	res, err := p.Run(context.Background(), Job{
+		InPath: pdfPath, Format: FormatMarkdown, OCRMode: OCRAuto, OCRLang: "eng",
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Remove(res.OutPath) })
+
+	if len(eng.calls) == 0 {
+		t.Fatalf("OCRAuto with low-text pages did not invoke OCR (regression)")
 	}
 }
