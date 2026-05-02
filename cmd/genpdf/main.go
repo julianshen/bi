@@ -19,6 +19,14 @@ import (
 func main() {
 	writeSinglePage("testdata/health.pdf", "Hello PDF")
 	writeMultiPage("testdata/multi-page.pdf", []string{"Page One Body", "Page Two Body"})
+	writeImagePDF("testdata/health-scanned.pdf",
+		[]string{"internal/ocr/testdata/eng.png"})
+	writeImagePDF("testdata/scanned-multi-lang.pdf", []string{
+		"internal/ocr/testdata/eng.png",
+		"internal/ocr/testdata/jpn.png",
+		"internal/ocr/testdata/chi_sim.png",
+		"internal/ocr/testdata/chi_tra.png",
+	})
 }
 
 func writeSinglePage(path, text string) {
@@ -37,6 +45,23 @@ func writeMultiPage(path string, pages []string) {
 	for _, body := range pages {
 		pdf.AddPage()
 		pdf.Cell(40, 10, body)
+	}
+	if err := pdf.OutputFileAndClose(path); err != nil {
+		log.Fatal(err)
+	}
+}
+
+// writeImagePDF builds an image-only PDF — one PNG per page, no
+// embedded text layer. This synthesises a "scanned" PDF for the
+// markdown OCR integration path: extractPDFPages returns empty
+// strings, the OCR pipeline rasterises each page back to PNG, and
+// Tesseract recovers the text.
+func writeImagePDF(path string, images []string) {
+	pdf := gofpdf.New("P", "mm", "A4", "")
+	for _, img := range images {
+		pdf.AddPage()
+		pdf.ImageOptions(img, 10, 10, 190, 0,
+			false, gofpdf.ImageOptions{ImageType: "PNG", ReadDpi: false}, 0, "")
 	}
 	if err := pdf.OutputFileAndClose(path); err != nil {
 		log.Fatal(err)
