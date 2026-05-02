@@ -35,9 +35,9 @@ func TestMarkdownImageModeString(t *testing.T) {
 
 func TestOCRModeString(t *testing.T) {
 	cases := map[worker.OCRMode]string{
-		worker.OCRAuto:    "auto",
-		worker.OCRAlways:  "always",
-		worker.OCRNever:   "never",
+		worker.OCRAuto:     "auto",
+		worker.OCRAlways:   "always",
+		worker.OCRNever:    "never",
 		worker.OCRMode(99): "unknown",
 	}
 	for m, want := range cases {

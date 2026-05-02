@@ -67,10 +67,10 @@ func TestPoolStoresOCREngine(t *testing.T) {
 	office := &fakeOffice{}
 	eng := &fakeOCR{}
 	cfg := Config{
-		Workers:        1,
-		QueueDepth:     1,
-		ConvertTimeout: time.Second,
-		OCR:            eng,
+		Workers:          1,
+		QueueDepth:       1,
+		ConvertTimeout:   time.Second,
+		OCR:              eng,
 		OCRTextThreshold: 16,
 		OCRDPI:           300,
 	}
