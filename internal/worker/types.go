@@ -46,6 +46,32 @@ func (m MarkdownImageMode) String() string {
 	}
 }
 
+// OCRMode controls when OCR runs on PDF pages in the markdown pipeline.
+type OCRMode int
+
+const (
+	// OCRAuto runs OCR on pages whose extracted text is below the
+	// configured threshold. Default zero value.
+	OCRAuto OCRMode = iota
+	// OCRAlways forces OCR on every page, ignoring the text layer.
+	OCRAlways
+	// OCRNever disables OCR even on text-layer-empty pages.
+	OCRNever
+)
+
+func (m OCRMode) String() string {
+	switch m {
+	case OCRAuto:
+		return "auto"
+	case OCRAlways:
+		return "always"
+	case OCRNever:
+		return "never"
+	default:
+		return "unknown"
+	}
+}
+
 // Job is a single conversion request, fully self-described.
 type Job struct {
 	InPath         string // path to a temp file already on disk
@@ -55,6 +81,10 @@ type Job struct {
 	Password       string            // empty if not encrypted
 	MarkdownImages MarkdownImageMode // markdown only
 	MarkdownMarp   bool              // markdown only; emit Marp front-matter
+	// OCR controls (markdown PDF route only). Zero values mean
+	// "auto" mode and "auto" language detection.
+	OCRMode OCRMode
+	OCRLang string
 }
 
 // Result describes the output of a successful conversion.

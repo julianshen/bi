@@ -32,3 +32,27 @@ func TestMarkdownImageModeString(t *testing.T) {
 		}
 	}
 }
+
+func TestOCRModeString(t *testing.T) {
+	cases := map[worker.OCRMode]string{
+		worker.OCRAuto:    "auto",
+		worker.OCRAlways:  "always",
+		worker.OCRNever:   "never",
+		worker.OCRMode(99): "unknown",
+	}
+	for m, want := range cases {
+		if got := m.String(); got != want {
+			t.Errorf("OCRMode(%d).String() = %q, want %q", m, got, want)
+		}
+	}
+}
+
+func TestJobZeroValueOCR(t *testing.T) {
+	var j worker.Job
+	if j.OCRMode != worker.OCRAuto {
+		t.Errorf("default Job.OCRMode = %v, want OCRAuto (zero value)", j.OCRMode)
+	}
+	if j.OCRLang != "" {
+		t.Errorf("default Job.OCRLang = %q, want empty", j.OCRLang)
+	}
+}
