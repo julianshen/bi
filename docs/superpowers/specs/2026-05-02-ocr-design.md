@@ -216,9 +216,11 @@ markdown structure creates more bugs than it prevents.
 - Populate `Job.OCRMode` and `Job.OCRLang`.
 - Validation errors → 400 via existing `problem.go`.
 - If the parent's startup probe found no Tesseract install and the
-  request asks for `ocr=always` or `ocr=auto`, return 503 with
-  `code=ocr_unavailable` *before* spawning the child. `ocr=never`
-  proceeds normally regardless of OCR availability.
+  request asks for `ocr=always`, return 503 with
+  `code=ocr_unavailable` *before* spawning the child. `ocr=auto`
+  and `ocr=never` proceed normally regardless of OCR availability:
+  in `auto` mode, pages with empty text layers will emit blank
+  rather than failing the request.
 
 ## Configuration
 
@@ -272,8 +274,9 @@ rule.
 | All OCR'd pages fail                           | 502 with `code=ocr_failed`.                                         |
 | Encrypted PDF                                  | Unchanged: 422. OCR never runs on docs we can't open.               |
 | Invalid `ocr` / `ocr_lang`                     | 400.                                                                |
-| `ocr=always` or `ocr=auto` with engine nil     | 503 `code=ocr_unavailable`.                                         |
-| `ocr=never` with engine nil                    | Request proceeds normally; OCR is simply not invoked.               |
+| `ocr=always` with engine unavailable           | 503 `code=ocr_unavailable`.                                         |
+| `ocr=auto` with engine unavailable             | Request proceeds with text-extraction only; pages with empty text layers are emitted blank rather than failing the request. |
+| `ocr=never` with engine unavailable            | Request proceeds normally; OCR is simply not invoked.               |
 | Panic inside cgo OCR                           | Caught at worker boundary (existing pattern); worker is replaced.   |
 
 ## Testing
