@@ -10,6 +10,47 @@ import (
 	"github.com/ledongthuc/pdf"
 )
 
+// extractPDFPages returns one string per PDF page, in order. Empty
+// pages produce an empty string at the corresponding index.
+//
+// This is the per-page form used by the OCR-aware markdown pipeline.
+// extractPDFText is preserved for the existing whole-document tests.
+func extractPDFPages(path string) ([]string, error) {
+	f, r, err := pdf.Open(path)
+	if err != nil {
+		if isEncryptedPDFErr(err) {
+			return nil, fmt.Errorf("%w: encrypted PDFs are not supported on the markdown route", ErrPasswordRequired)
+		}
+		return nil, fmt.Errorf("worker: open pdf: %w", err)
+	}
+	defer f.Close()
+
+	out := make([]string, 0, r.NumPage())
+	for i := 1; i <= r.NumPage(); i++ {
+		page := r.Page(i)
+		if page.V.IsNull() {
+			out = append(out, "")
+			continue
+		}
+		rows, err := page.GetTextByRow()
+		if err != nil {
+			return nil, fmt.Errorf("worker: pdf page %d: %w", i, err)
+		}
+		var sb strings.Builder
+		for _, row := range rows {
+			for j, w := range row.Content {
+				if j > 0 {
+					sb.WriteByte(' ')
+				}
+				sb.WriteString(w.S)
+			}
+			sb.WriteByte('\n')
+		}
+		out = append(out, sb.String())
+	}
+	return out, nil
+}
+
 // extractPDFText extracts visible text from a PDF using a Go-native
 // reader. LibreOffice's pdfimport flattens PDF pages to embedded
 // images on load, so the existing pdf → html → markdown path cannot

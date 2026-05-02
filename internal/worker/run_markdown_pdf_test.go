@@ -133,3 +133,20 @@ func TestIsPDFInput(t *testing.T) {
 		}
 	}
 }
+
+func TestExtractPDFPages(t *testing.T) {
+	path := filepath.Join("..", "..", "testdata", "multi-page.pdf")
+	pages, err := extractPDFPages(path)
+	if err != nil {
+		t.Fatalf("extractPDFPages: %v", err)
+	}
+	if len(pages) != 2 {
+		t.Fatalf("got %d pages, want 2", len(pages))
+	}
+	if !strings.Contains(pages[0], "Page One Body") {
+		t.Errorf("page 0 = %q, want 'Page One Body'", pages[0])
+	}
+	if !strings.Contains(pages[1], "Page Two Body") {
+		t.Errorf("page 1 = %q, want 'Page Two Body'", pages[1])
+	}
+}
