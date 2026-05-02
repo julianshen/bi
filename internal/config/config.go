@@ -4,18 +4,23 @@ import (
 	"fmt"
 	"runtime"
 	"strconv"
+	"strings"
 	"time"
 )
 
 type Config struct {
-	ListenAddr     string
-	APIToken       string
-	LOKPath        string
-	Workers        int
-	QueueDepth     int
-	MaxUploadBytes int64
-	ConvertTimeout time.Duration
-	ReadyzCacheTTL time.Duration
+	ListenAddr       string
+	APIToken         string
+	LOKPath          string
+	Workers          int
+	QueueDepth       int
+	MaxUploadBytes   int64
+	ConvertTimeout   time.Duration
+	ReadyzCacheTTL   time.Duration
+	OCREnabled       bool
+	OCRTessdataPath  string
+	OCRTextThreshold int
+	OCRDPI           float64
 }
 
 // Load reads config from a string→string map (typically populated from
@@ -24,10 +29,13 @@ type Config struct {
 // ResolveLOKPath.
 func Load(env map[string]string) (Config, error) {
 	c := Config{
-		ListenAddr:     ":8080",
-		MaxUploadBytes: 100 * 1024 * 1024,
-		ConvertTimeout: 120 * time.Second,
-		ReadyzCacheTTL: 5 * time.Second,
+		ListenAddr:       ":8080",
+		MaxUploadBytes:   100 * 1024 * 1024,
+		ConvertTimeout:   120 * time.Second,
+		ReadyzCacheTTL:   5 * time.Second,
+		OCREnabled:       true,
+		OCRTextThreshold: 16,
+		OCRDPI:           300,
 	}
 	c.Workers = min(runtime.NumCPU(), 4)
 	c.QueueDepth = c.Workers * 2
@@ -76,6 +84,35 @@ func Load(env map[string]string) (Config, error) {
 			return c, fmt.Errorf("BI_READYZ_CACHE_TTL=%q: %w", v, err)
 		}
 		c.ReadyzCacheTTL = d
+	}
+	if v, ok := env["BI_OCR_ENABLED"]; ok {
+		switch strings.ToLower(v) {
+		case "true", "1", "yes":
+			c.OCREnabled = true
+		case "false", "0", "no":
+			c.OCREnabled = false
+		default:
+			return c, fmt.Errorf("BI_OCR_ENABLED=%q invalid", v)
+		}
+	}
+	if v, ok := env["BI_OCR_TESSDATA"]; ok {
+		c.OCRTessdataPath = v
+	} else if v, ok := env["TESSDATA_PREFIX"]; ok {
+		c.OCRTessdataPath = v
+	}
+	if v, ok := env["BI_OCR_THRESHOLD"]; ok {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 0 {
+			return c, fmt.Errorf("BI_OCR_THRESHOLD=%q invalid", v)
+		}
+		c.OCRTextThreshold = n
+	}
+	if v, ok := env["BI_OCR_DPI"]; ok {
+		f, err := strconv.ParseFloat(v, 64)
+		if err != nil || f <= 0 {
+			return c, fmt.Errorf("BI_OCR_DPI=%q invalid", v)
+		}
+		c.OCRDPI = f
 	}
 	return c, nil
 }

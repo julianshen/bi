@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 func (p *Pool) runMarkdown(ctx context.Context, job Job) (Result, error) {
@@ -20,11 +21,7 @@ func (p *Pool) runMarkdown(ctx context.Context, job Job) (Result, error) {
 	// PDFs short-circuit: LO's pdfimport flattens pages to embedded
 	// images, so the doc.SaveAs("html") → mdconv path returns no text.
 	if isPDFInput(job.InPath) {
-		text, err := extractPDFText(job.InPath)
-		if err != nil {
-			return Result{}, fmt.Errorf("%w: %w", ErrMarkdownConversion, err)
-		}
-		return writePDFMarkdownResult(text)
+		return p.runMarkdownPDF(ctx, job)
 	}
 	ctx, span := tracer.Start(ctx, "lok.load")
 	doc, err := p.office.Load(job.InPath, job.Password)
@@ -72,6 +69,37 @@ func (p *Pool) runMarkdown(ctx context.Context, job Job) (Result, error) {
 	if err := out.Close(); err != nil {
 		_ = os.Remove(outPath)
 		return Result{}, fmt.Errorf("worker: close md: %w", err)
+	}
+	return Result{OutPath: outPath, MIME: "text/markdown"}, nil
+}
+
+func (p *Pool) runMarkdownPDF(ctx context.Context, job Job) (Result, error) {
+	pages, err := extractPDFPages(job.InPath)
+	if err != nil {
+		return Result{}, fmt.Errorf("%w: %w", ErrMarkdownConversion, err)
+	}
+
+	// No engine configured OR caller said "never": legacy path
+	// joining pages with the existing separator.
+	if p.cfg.OCR == nil || job.OCRMode == OCRNever {
+		joined := strings.Join(pages, "\n")
+		return writePDFMarkdownResult([]byte(strings.TrimSpace(joined)))
+	}
+
+	// Engine present and OCR not disabled: load the doc so we can
+	// render pages that need OCR. Loading is unconditional even on
+	// fully-digital PDFs because we don't know which pages will need
+	// OCR until we walk them; the OCRAuto no-op fast path sees zero
+	// RenderPagePNG calls when every page has enough text.
+	doc, err := p.office.Load(job.InPath, job.Password)
+	if err != nil {
+		return Result{}, Classify(err)
+	}
+	defer doc.Close()
+
+	outPath, err := assembleMarkdownWithOCR(ctx, pages, doc, p.cfg.OCR, job.OCRMode, job.OCRLang, p.cfg.OCRTextThreshold, p.cfg.OCRDPI)
+	if err != nil {
+		return Result{}, err
 	}
 	return Result{OutPath: outPath, MIME: "text/markdown"}, nil
 }

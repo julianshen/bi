@@ -36,7 +36,18 @@ RUN apt-get update \
         media-types \
         fonts-liberation \
         fonts-dejavu-core \
+        tesseract-ocr \
+        tesseract-ocr-eng \
+        tesseract-ocr-jpn \
+        tesseract-ocr-chi-sim \
+        tesseract-ocr-chi-tra \
+        tesseract-ocr-osd \
+        libtesseract-dev \
+        libleptonica-dev \
  && rm -rf /var/lib/apt/lists/*
+
+ENV TESSDATA_PREFIX=/usr/share/tesseract-ocr/5/tessdata \
+    BI_OCR_TESSDATA=/usr/share/tesseract-ocr/5/tessdata
 
 WORKDIR /src
 

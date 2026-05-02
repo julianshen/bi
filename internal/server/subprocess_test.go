@@ -85,6 +85,8 @@ func TestSubprocessConverter_AllErrorMappings(t *testing.T) {
 		"page-out-of-range":    worker.ErrPageOutOfRange,
 		"invalid-dpi":          worker.ErrInvalidDPI,
 		"markdown-pipeline":    worker.ErrMarkdownConversion,
+		"ocr-failed":           worker.ErrOCRFailed,
+		"ocr-unavailable":      worker.ErrOCRUnavailable,
 		"timeout":              context.DeadlineExceeded,
 	}
 	for kind, want := range cases {
@@ -236,6 +238,50 @@ fi
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { os.Remove(res.OutPath) })
+}
+
+func TestBuildSubprocessArgsForwardsOCR(t *testing.T) {
+	args := buildSubprocessArgs(worker.Job{
+		Format:  worker.FormatMarkdown,
+		InPath:  "/tmp/in.pdf",
+		OCRMode: worker.OCRAlways,
+		OCRLang: "jpn",
+	}, "/tmp/out.md", 5*time.Second)
+
+	wantPairs := [][2]string{
+		{"-ocr", "always"},
+		{"-ocr-lang", "jpn"},
+	}
+	for _, p := range wantPairs {
+		if !argHasPair(args, p[0], p[1]) {
+			t.Errorf("missing %v in args=%v", p, args)
+		}
+	}
+}
+
+func TestBuildSubprocessArgsAutoLangOmitted(t *testing.T) {
+	// When OCRLang is empty, no -ocr-lang flag is emitted; the child's
+	// own default is used instead.
+	args := buildSubprocessArgs(worker.Job{
+		Format:  worker.FormatMarkdown,
+		InPath:  "/tmp/in.pdf",
+		OCRMode: worker.OCRAuto,
+		OCRLang: "",
+	}, "/tmp/out.md", 0)
+	for _, a := range args {
+		if a == "-ocr-lang" {
+			t.Errorf("unexpected -ocr-lang in args=%v", args)
+		}
+	}
+}
+
+func argHasPair(args []string, flag, value string) bool {
+	for i := 0; i < len(args)-1; i++ {
+		if args[i] == flag && args[i+1] == value {
+			return true
+		}
+	}
+	return false
 }
 
 func TestSubprocessConverter_PNGFlagsForwarded(t *testing.T) {

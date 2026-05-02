@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/julianshen/bi/internal/ocr"
 	"github.com/julianshen/bi/internal/worker"
 )
 
@@ -212,4 +213,69 @@ func TestRealConversion(t *testing.T) {
 	// encrypted files, and truncated zip files can hang the LO load path
 	// for the full ConvertTimeout. The error classification paths are
 	// covered by unit tests (TestClassify, run_*_test.go).
+}
+
+// TestRealOCRMarkdown exercises the full markdown PDF + OCR path
+// against a real LibreOffice + real Tesseract install. Requires
+// both LOK_PATH and TESSDATA_PREFIX. The fixture
+// scanned-multi-lang.pdf has four image-only pages (one per script);
+// extractPDFPages returns empty strings for each, the auto-mode
+// pipeline routes them to OCR, and the engine recovers each phrase.
+func TestRealOCRMarkdown(t *testing.T) {
+	skipNoLOK(t)
+	tessdata := os.Getenv("TESSDATA_PREFIX")
+	if tessdata == "" {
+		t.Skip("TESSDATA_PREFIX not set")
+	}
+	engine, err := ocr.New(ocr.Config{
+		TessdataPath: tessdata,
+		Languages:    ocr.SupportedLangs,
+		DPI:          300,
+	})
+	if err != nil {
+		t.Fatalf("ocr.New: %v", err)
+	}
+	t.Cleanup(func() { _ = engine.Close() })
+
+	cfg := worker.Config{
+		LOKPath:          os.Getenv("LOK_PATH"),
+		Workers:          1,
+		QueueDepth:       1,
+		ConvertTimeout:   120 * time.Second,
+		OCR:              engine,
+		OCRTextThreshold: 16,
+		OCRDPI:           300,
+	}
+	p, err := worker.New(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = p.Close() })
+
+	res, err := p.Run(context.Background(), worker.Job{
+		InPath:  loadFixture(t, "scanned-multi-lang.pdf"),
+		Format:  worker.FormatMarkdown,
+		OCRMode: worker.OCRAuto,
+		OCRLang: "auto",
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Remove(res.OutPath) })
+
+	body, err := os.ReadFile(res.OutPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stripped := strings.Join(strings.Fields(string(body)), "")
+
+	wants := []string{"Hello", "こんにちは", "你好", "您好"}
+	for _, w := range wants {
+		if !strings.Contains(stripped, w) {
+			t.Errorf("output missing %q\nfull body:\n%s", w, body)
+		}
+	}
+	if !strings.Contains(string(body), "<!-- ocr:") {
+		t.Errorf("output missing OCR marker; body:\n%s", body)
+	}
 }

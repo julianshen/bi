@@ -31,6 +31,8 @@ func TestWriteProblemFromError(t *testing.T) {
 		{"invalid dpi", worker.ErrInvalidDPI, "bad-request", 400},
 		{"deadline", context.DeadlineExceeded, "timeout", 504},
 		{"unknown", errors.New("unexpected"), "internal", 500},
+		{"ocr unavailable", worker.ErrOCRUnavailable, "ocr-unavailable", 503},
+		{"ocr failed", worker.ErrOCRFailed, "ocr-failed", 502},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

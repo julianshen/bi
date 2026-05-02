@@ -24,31 +24,23 @@ import (
 // crashes on POSTed documents while it works fine in a one-shot CLI.
 //
 // The contract with `cmd/bi/convert.go`:
-//   - flags: -in, -out, -format, -page, -dpi, -password, -images, -timeout
+//   - flags: -in, -out, -format, -page, -dpi, -password, -images, -marp, -ocr, -ocr-lang, -timeout
 //   - success: exit 0, last stdout line is JSON {"mime":"...","total_pages":N}
 //   - failure: exit non-zero, last stdout line is JSON {"error":"...","detail":"..."}
 //   - the error string maps back to a worker sentinel via classifySubprocessErr.
 type SubprocessConverter struct {
-	BinPath string        // path to the bi executable (typically os.Executable())
-	LOKPath string        // forwarded as $LOK_PATH to the child
-	TmpDir  string        // where to stage output files; empty = system default
-	Timeout time.Duration // per-conversion ceiling; child also enforces this
-	Metrics *Metrics      // optional; observed for conversion duration and LOK errors
+	BinPath      string        // path to the bi executable (typically os.Executable())
+	LOKPath      string        // forwarded as $LOK_PATH to the child
+	TmpDir       string        // where to stage output files; empty = system default
+	Timeout      time.Duration // per-conversion ceiling; child also enforces this
+	Metrics      *Metrics      // optional; observed for conversion duration and LOK errors
+	OCRAvailable bool          // mirrors Deps.OCRAvailable; informational, set by serve at boot
 }
 
-// Run spawns `bi convert ...`, waits for it, and translates the child's
-// outcome into a worker.Result / sentinel error.
-func (s *SubprocessConverter) Run(ctx context.Context, job worker.Job) (worker.Result, error) {
-	if s.BinPath == "" {
-		return worker.Result{}, errors.New("subprocess: BinPath not set")
-	}
-
-	start := time.Now()
-	outPath, err := outputTempPath(s.TmpDir, job.Format)
-	if err != nil {
-		return worker.Result{}, err
-	}
-
+// buildSubprocessArgs constructs the argv for `bi convert` from a
+// worker.Job plus the resolved output path and timeout. Exposed for
+// testing the flag contract.
+func buildSubprocessArgs(job worker.Job, outPath string, timeout time.Duration) []string {
 	args := []string{
 		"convert",
 		"-in", job.InPath,
@@ -72,9 +64,43 @@ func (s *SubprocessConverter) Run(ctx context.Context, job worker.Job) (worker.R
 	if job.MarkdownMarp {
 		args = append(args, "-marp")
 	}
-	if s.Timeout > 0 {
-		args = append(args, "-timeout", s.Timeout.String())
+	if job.Format == worker.FormatMarkdown {
+		var ocrFlag string
+		switch job.OCRMode {
+		case worker.OCRAuto:
+			ocrFlag = "auto"
+		case worker.OCRAlways:
+			ocrFlag = "always"
+		case worker.OCRNever:
+			ocrFlag = "never"
+		default:
+			ocrFlag = "auto"
+		}
+		args = append(args, "-ocr", ocrFlag)
+		if job.OCRLang != "" {
+			args = append(args, "-ocr-lang", job.OCRLang)
+		}
 	}
+	if timeout > 0 {
+		args = append(args, "-timeout", timeout.String())
+	}
+	return args
+}
+
+// Run spawns `bi convert ...`, waits for it, and translates the child's
+// outcome into a worker.Result / sentinel error.
+func (s *SubprocessConverter) Run(ctx context.Context, job worker.Job) (worker.Result, error) {
+	if s.BinPath == "" {
+		return worker.Result{}, errors.New("subprocess: BinPath not set")
+	}
+
+	start := time.Now()
+	outPath, err := outputTempPath(s.TmpDir, job.Format)
+	if err != nil {
+		return worker.Result{}, err
+	}
+
+	args := buildSubprocessArgs(job, outPath, s.Timeout)
 
 	// LibreOffice creates a per-process user-profile directory (lu*.tmp)
 	// in $TMPDIR (default /tmp). When many subprocess invocations share
@@ -213,6 +239,10 @@ func classifySubprocessErr(kind, detail string) error {
 		return wrap(worker.ErrInvalidDPI, detail)
 	case "markdown-pipeline":
 		return wrap(worker.ErrMarkdownConversion, detail)
+	case "ocr-failed":
+		return wrap(worker.ErrOCRFailed, detail)
+	case "ocr-unavailable":
+		return wrap(worker.ErrOCRUnavailable, detail)
 	case "timeout":
 		return context.DeadlineExceeded
 	default:
