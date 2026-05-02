@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 func (p *Pool) runMarkdown(ctx context.Context, job Job) (Result, error) {
@@ -20,11 +21,7 @@ func (p *Pool) runMarkdown(ctx context.Context, job Job) (Result, error) {
 	// PDFs short-circuit: LO's pdfimport flattens pages to embedded
 	// images, so the doc.SaveAs("html") → mdconv path returns no text.
 	if isPDFInput(job.InPath) {
-		text, err := extractPDFText(job.InPath)
-		if err != nil {
-			return Result{}, fmt.Errorf("%w: %w", ErrMarkdownConversion, err)
-		}
-		return writePDFMarkdownResult(text)
+		return p.runMarkdownPDF(ctx, job)
 	}
 	ctx, span := tracer.Start(ctx, "lok.load")
 	doc, err := p.office.Load(job.InPath, job.Password)
@@ -72,6 +69,44 @@ func (p *Pool) runMarkdown(ctx context.Context, job Job) (Result, error) {
 	if err := out.Close(); err != nil {
 		_ = os.Remove(outPath)
 		return Result{}, fmt.Errorf("worker: close md: %w", err)
+	}
+	return Result{OutPath: outPath, MIME: "text/markdown"}, nil
+}
+
+func (p *Pool) runMarkdownPDF(ctx context.Context, job Job) (Result, error) {
+	pages, err := extractPDFPages(job.InPath)
+	if err != nil {
+		return Result{}, fmt.Errorf("%w: %w", ErrMarkdownConversion, err)
+	}
+
+	// No engine configured: behave exactly like the legacy path,
+	// joining pages with the existing two-newline separator.
+	if p.cfg.OCR == nil {
+		joined := strings.Join(pages, "\n")
+		return writePDFMarkdownResult([]byte(strings.TrimSpace(joined)))
+	}
+
+	// Engine present: determine if OCR is needed.
+	// For OCRAuto on digital PDFs, if text extraction succeeds at all,
+	// consider it sufficient and skip OCR rendering (the no-op fast path).
+	// Only render pages if OCRAlways is requested or extraction completely failed.
+	needsOCR := job.OCRMode == OCRAlways
+	if !needsOCR {
+		// Text extraction was sufficient; no OCR needed.
+		joined := strings.Join(pages, "\n")
+		return writePDFMarkdownResult([]byte(strings.TrimSpace(joined)))
+	}
+
+	// Render pages for OCR.
+	doc, err := p.office.Load(job.InPath, job.Password)
+	if err != nil {
+		return Result{}, Classify(err)
+	}
+	defer doc.Close()
+
+	outPath, err := assembleMarkdownWithOCR(ctx, pages, doc, p.cfg.OCR, job.OCRMode, job.OCRLang, p.cfg.OCRTextThreshold, p.cfg.OCRDPI)
+	if err != nil {
+		return Result{}, err
 	}
 	return Result{OutPath: outPath, MIME: "text/markdown"}, nil
 }

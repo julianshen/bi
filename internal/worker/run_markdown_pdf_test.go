@@ -150,3 +150,31 @@ func TestExtractPDFPages(t *testing.T) {
 		t.Errorf("page 1 = %q, want 'Page Two Body'", pages[1])
 	}
 }
+
+func TestPoolRunMarkdownPDFWithOCREngineNoOpForDigitalPDF(t *testing.T) {
+	office := &fakeOffice{}
+	eng := &fakeOCR{}
+	cfg := Config{
+		Workers: 1, QueueDepth: 1, ConvertTimeout: time.Second,
+		OCR: eng, OCRTextThreshold: 16, OCRDPI: 300,
+	}
+	p, _ := newWithOffice(cfg, office)
+	t.Cleanup(func() { _ = p.Close() })
+	p.setMarkdown(&fakeMD{})
+
+	pdfPath := filepath.Join("..", "..", "testdata", "multi-page.pdf")
+	res, err := p.Run(context.Background(), Job{
+		InPath: pdfPath, Format: FormatMarkdown, OCRMode: OCRAuto, OCRLang: "eng",
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Remove(res.OutPath) })
+	if len(eng.calls) != 0 {
+		t.Errorf("engine called for digital PDF: %d", len(eng.calls))
+	}
+	body, _ := os.ReadFile(res.OutPath)
+	if !strings.Contains(string(body), "Page One Body") {
+		t.Errorf("missing extracted text: %q", body)
+	}
+}
