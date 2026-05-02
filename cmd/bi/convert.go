@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/julianshen/bi/internal/config"
+	"github.com/julianshen/bi/internal/ocr"
 	"github.com/julianshen/bi/internal/worker"
 )
 
@@ -35,6 +36,8 @@ func runConvert(args []string) {
 	password := fs.String("password", "", "document password (optional)")
 	images := fs.String("images", "embed", "embed | drop (markdown only)")
 	marp := fs.Bool("marp", false, "emit Marp-style markdown (markdown only)")
+	ocrFlag := fs.String("ocr", "auto", "auto | always | never (markdown only)")
+	ocrLang := fs.String("ocr-lang", "auto", "OCR language (markdown only)")
 	timeout := fs.Duration("timeout", 120*time.Second, "max time for the conversion")
 	if err := fs.Parse(args); err != nil {
 		failConvert("bad-flags", err)
@@ -43,7 +46,7 @@ func runConvert(args []string) {
 		failConvert("bad-flags", errors.New("-in, -out, -format are required"))
 	}
 
-	job, err := buildJob(*in, *format, *page, *dpi, *password, *images, *marp)
+	job, err := buildJob(*in, *format, *page, *dpi, *password, *images, *marp, *ocrFlag, *ocrLang)
 	if err != nil {
 		failConvert("bad-flags", err)
 	}
@@ -62,11 +65,39 @@ func runConvert(args []string) {
 		cfg.LOKPath = path
 	}
 
+	// OCR engine setup. These values are temporary defaults pending Task 13
+	// config wiring (cfg.OCREnabled, cfg.OCRTessdataPath, cfg.OCRDPI).
+	tessdata := os.Getenv("TESSDATA_PREFIX")
+	var ocrEngine ocr.Engine
+	if job.Format == worker.FormatMarkdown && job.OCRMode != worker.OCRNever && tessdata != "" {
+		var engineErr error
+		ocrEngine, engineErr = ocr.New(ocr.Config{
+			TessdataPath: tessdata,
+			Languages:    ocr.SupportedLangs,
+			DPI:          300,
+		})
+		if engineErr != nil {
+			if job.OCRMode == worker.OCRAlways {
+				failConvert("ocr-unavailable", engineErr)
+			}
+			ocrEngine = nil
+		}
+		if ocrEngine != nil {
+			defer ocrEngine.Close()
+		}
+	}
+	if job.OCRMode == worker.OCRAlways && ocrEngine == nil {
+		failConvert("ocr-unavailable", errors.New("OCR engine unavailable"))
+	}
+
 	pool, err := worker.New(worker.Config{
-		LOKPath:        cfg.LOKPath,
-		Workers:        1,
-		QueueDepth:     1,
-		ConvertTimeout: *timeout,
+		LOKPath:          cfg.LOKPath,
+		Workers:          1,
+		QueueDepth:       1,
+		ConvertTimeout:   *timeout,
+		OCR:              ocrEngine,
+		OCRTextThreshold: 16,
+		OCRDPI:           300,
 	})
 	if err != nil {
 		failConvert(classifyConvertErr(err), err)
@@ -105,7 +136,7 @@ func runConvert(args []string) {
 // buildJob translates CLI flags into a worker.Job. Validation that's local
 // to this binary lives here; semantic validation (page range, dpi range)
 // happens inside worker.Run.
-func buildJob(in, format string, page int, dpi float64, password, images string, marp bool) (worker.Job, error) {
+func buildJob(in, format string, page int, dpi float64, password, images string, marp bool, ocrMode, ocrLang string) (worker.Job, error) {
 	job := worker.Job{InPath: in, Password: password}
 	switch strings.ToLower(format) {
 	case "pdf":
@@ -125,6 +156,17 @@ func buildJob(in, format string, page int, dpi float64, password, images string,
 			return job, fmt.Errorf("invalid -images value %q", images)
 		}
 		job.MarkdownMarp = marp
+		switch ocrMode {
+		case "auto", "":
+			job.OCRMode = worker.OCRAuto
+		case "always":
+			job.OCRMode = worker.OCRAlways
+		case "never":
+			job.OCRMode = worker.OCRNever
+		default:
+			return job, fmt.Errorf("invalid -ocr value %q", ocrMode)
+		}
+		job.OCRLang = ocrLang
 	default:
 		return job, fmt.Errorf("invalid -format value %q", format)
 	}
@@ -150,6 +192,10 @@ func classifyConvertErr(err error) string {
 		return "invalid-dpi"
 	case errors.Is(err, worker.ErrMarkdownConversion):
 		return "markdown-pipeline"
+	case errors.Is(err, worker.ErrOCRFailed):
+		return "ocr-failed"
+	case errors.Is(err, worker.ErrOCRUnavailable):
+		return "ocr-unavailable"
 	case errors.Is(err, context.DeadlineExceeded):
 		return "timeout"
 	default:
