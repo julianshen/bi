@@ -65,16 +65,20 @@ func runConvert(args []string) {
 		cfg.LOKPath = path
 	}
 
-	// OCR engine setup. These values are temporary defaults pending Task 13
-	// config wiring (cfg.OCREnabled, cfg.OCRTessdataPath, cfg.OCRDPI).
-	tessdata := os.Getenv("TESSDATA_PREFIX")
+	// OCR engine setup. Tessdata path resolves from cfg first
+	// (BI_OCR_TESSDATA / TESSDATA_PREFIX handled in config.Load),
+	// falling back to TESSDATA_PREFIX direct read for older envs.
+	tessdata := cfg.OCRTessdataPath
+	if tessdata == "" {
+		tessdata = os.Getenv("TESSDATA_PREFIX")
+	}
 	var ocrEngine ocr.Engine
-	if job.Format == worker.FormatMarkdown && job.OCRMode != worker.OCRNever && tessdata != "" {
+	if cfg.OCREnabled && job.Format == worker.FormatMarkdown && job.OCRMode != worker.OCRNever && tessdata != "" {
 		var engineErr error
 		ocrEngine, engineErr = ocr.New(ocr.Config{
 			TessdataPath: tessdata,
 			Languages:    ocr.SupportedLangs,
-			DPI:          300,
+			DPI:          cfg.OCRDPI,
 		})
 		if engineErr != nil {
 			if job.OCRMode == worker.OCRAlways {
@@ -96,8 +100,8 @@ func runConvert(args []string) {
 		QueueDepth:       1,
 		ConvertTimeout:   *timeout,
 		OCR:              ocrEngine,
-		OCRTextThreshold: 16,
-		OCRDPI:           300,
+		OCRTextThreshold: cfg.OCRTextThreshold,
+		OCRDPI:           cfg.OCRDPI,
 	})
 	if err != nil {
 		failConvert(classifyConvertErr(err), err)
