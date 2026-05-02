@@ -62,3 +62,27 @@ func TestPoolCloseSurfacesOfficeErr(t *testing.T) {
 		t.Fatalf("Close err = %v, want errBoom", err)
 	}
 }
+
+func TestPoolStoresOCREngine(t *testing.T) {
+	office := &fakeOffice{}
+	eng := &fakeOCR{}
+	cfg := Config{
+		Workers:        1,
+		QueueDepth:     1,
+		ConvertTimeout: time.Second,
+		OCR:            eng,
+		OCRTextThreshold: 16,
+		OCRDPI:           300,
+	}
+	p, err := newWithOffice(cfg, office)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = p.Close() })
+	if p.cfg.OCR != eng {
+		t.Errorf("p.cfg.OCR != injected engine")
+	}
+	if p.cfg.OCRTextThreshold != 16 {
+		t.Errorf("threshold not stored")
+	}
+}

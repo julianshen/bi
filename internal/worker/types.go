@@ -3,6 +3,8 @@ package worker
 import (
 	"context"
 	"time"
+
+	"github.com/julianshen/bi/internal/ocr"
 )
 
 // Format identifies a target conversion output.
@@ -106,4 +108,19 @@ type Config struct {
 	QueueDepth     int
 	ConvertTimeout time.Duration
 	Inst           Instrumenter // optional; nil means no metrics
+
+	// OCR is the optional engine used by the markdown PDF route.
+	// Nil disables OCR entirely; OCRMode=auto/always with a nil
+	// engine is rejected at the HTTP layer before reaching the
+	// worker, so the worker treats nil as "feature disabled".
+	OCR ocr.Engine
+
+	// OCRTextThreshold is the per-page extracted-character count
+	// below which OCR runs (in OCRAuto mode). Default 16 set by
+	// the caller (cmd/bi/convert.go).
+	OCRTextThreshold int
+
+	// OCRDPI is the DPI passed to lokDoc.RenderPagePNG when an
+	// OCR-needing page is rasterised. Default 300 set by caller.
+	OCRDPI float64
 }
