@@ -47,6 +47,10 @@ func mapError(err error) problemMapping {
 		return problemMapping{"markdown-pipeline", "Markdown rendering failed", http.StatusInternalServerError}
 	case errors.Is(err, worker.ErrLOKUnsupported):
 		return problemMapping{"lok-unsupported", "LibreOffice build is missing required functionality", http.StatusNotImplemented}
+	case errors.Is(err, worker.ErrOCRUnavailable):
+		return problemMapping{"ocr-unavailable", "OCR not available", http.StatusServiceUnavailable}
+	case errors.Is(err, worker.ErrOCRFailed):
+		return problemMapping{"ocr-failed", "OCR pipeline failed", http.StatusBadGateway}
 	case errors.Is(err, worker.ErrPageOutOfRange), errors.Is(err, worker.ErrInvalidDPI):
 		return problemMapping{"bad-request", "Bad request", http.StatusBadRequest}
 	case errors.Is(err, ErrMissingContentType):

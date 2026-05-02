@@ -21,6 +21,11 @@ type Deps struct {
 	Registry       prometheus.Registerer
 	Gatherer       prometheus.Gatherer
 	Metrics        *Metrics
+	// OCRAvailable reports whether the parent process found a
+	// usable Tesseract install at startup. False makes the
+	// markdown handler return 503 for any request that asks for
+	// OCR (auto/always); ocr=never proceeds normally.
+	OCRAvailable bool
 }
 
 type Server struct {
