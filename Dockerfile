@@ -18,6 +18,8 @@ RUN apt-get update \
         ca-certificates \
         pkg-config \
         libx11-dev \
+        libtesseract-dev \
+        libleptonica-dev \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /src
@@ -56,11 +58,21 @@ RUN apt-get update \
         ca-certificates \
         fonts-liberation \
         fonts-dejavu-core \
+        tesseract-ocr \
+        tesseract-ocr-eng \
+        tesseract-ocr-jpn \
+        tesseract-ocr-chi-sim \
+        tesseract-ocr-chi-tra \
+        tesseract-ocr-osd \
+        libtesseract5 \
+        libleptonica-dev \
  && rm -rf /var/lib/apt/lists/*
 
 ENV LOK_PATH=/usr/lib/libreoffice/program \
     BI_LISTEN_ADDR=:8080 \
-    GODEBUG=asyncpreemptoff=1
+    GODEBUG=asyncpreemptoff=1 \
+    BI_OCR_TESSDATA=/usr/share/tesseract-ocr/5/tessdata \
+    TESSDATA_PREFIX=/usr/share/tesseract-ocr/5/tessdata
 # GODEBUG=asyncpreemptoff=1 is required: LibreOffice installs a SIGURG handler
 # without SA_ONSTACK, which crashes the Go runtime (Go uses SIGURG for goroutine
 # preemption since 1.14). Disabling async preemption is the standard workaround
