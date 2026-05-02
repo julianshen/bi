@@ -15,6 +15,8 @@ var (
 	ErrUnsupportedFormat  = errors.New("worker: unsupported document")
 	ErrLOKUnsupported     = errors.New("worker: LOK build lacks required slot")
 	ErrMarkdownConversion = errors.New("worker: markdown pipeline failed")
+	ErrOCRFailed          = errors.New("worker: OCR failed for all pages")
+	ErrOCRUnavailable     = errors.New("worker: OCR engine unavailable")
 )
 
 // ErrLokUnsupportedRaw is the upstream sentinel re-exported for tests so they
@@ -48,6 +50,12 @@ func ErrorKind(err error) string {
 	}
 	if errors.Is(err, ErrMarkdownConversion) {
 		return "markdown-pipeline"
+	}
+	if errors.Is(err, ErrOCRFailed) {
+		return "ocr-failed"
+	}
+	if errors.Is(err, ErrOCRUnavailable) {
+		return "ocr-unavailable"
 	}
 	if errors.Is(err, ErrQueueFull) {
 		return "queue-full"
