@@ -59,10 +59,18 @@ A page is OCR'd when:
 ## Architecture
 
 ```
-POST /markdown (PDF)
+POST /markdown (PDF)            HTTP server (parent process — pure Go)
+        │
+        ├── parse + validate ocr / ocr_lang query params
         │
         ▼
-  Worker (owns *lok.Office singleton, also owns ocr.Engine)
+  SubprocessConverter spawns:  bi convert -in ... -ocr ... -ocr-lang ...
+        │
+        ▼
+  bi convert (child process — cgo for both lok and OCR)
+        │
+        ▼
+  worker.Pool (Workers=1 in subprocess; owns *lok.Office + ocr.Engine)
         │
         ├── extractPDFText(path)              ── existing per-page
         │
@@ -76,11 +84,20 @@ POST /markdown (PDF)
               `---` page separator between pages.
 ```
 
-OCR runs **inside** the existing markdown worker. No second worker
-pool. The lok worker pool already throttles overall throughput;
-adding an OCR pool would only add cross-pool coordination. Each
-worker keeps one long-lived `ocr.Engine` instance, reused across
-pages within a request and across requests.
+OCR lives in the **child `bi convert` process**, alongside lok. The
+parent serve process stays pure Go (no cgo, no Tesseract dependency
+at link time). The child process is short-lived (one conversion);
+`ocr.Engine` is constructed once per subprocess run, used for every
+page that needs OCR within that conversion, then released when the
+process exits. This matches the existing isolation pattern for lok
+crashes — a Tesseract panic kills one request, not the server.
+
+The subprocess flag contract gains `-ocr <auto|always|never>` and
+`-ocr-lang <string>`; both are forwarded by `SubprocessConverter`.
+`SubprocessConverter`'s "engine availability" check runs in the
+parent at startup (probe for `tesseract` binary or `tessdata` dir,
+configurable) so requests that ask for OCR can be rejected with 503
+before forking a doomed child.
 
 ## New package: `internal/ocr`
 
@@ -140,6 +157,12 @@ type Config struct {
 }
 ```
 
+In the subprocess (`cmd/bi/convert.go`), `ocr.New(...)` is called
+once and assigned to `worker.Config.OCR` before `worker.New`. In the
+parent (`cmd/bi/serve.go`), no OCR engine is constructed — the
+parent only checks at startup that the OCR install exists (file
+probe) and stores that boolean on `SubprocessConverter`.
+
 ### Pipeline (`run_markdown_pdf.go`)
 
 The current `extractPDFText` returns the whole PDF in one shot. The
@@ -192,9 +215,10 @@ markdown structure creates more bugs than it prevents.
   to `auto` / `auto`.
 - Populate `Job.OCRMode` and `Job.OCRLang`.
 - Validation errors → 400 via existing `problem.go`.
-- If `Job.OCRMode` is `OCRAlways` or `OCRAuto` and `worker.Config.OCR`
-  is nil, return 503 with `code=ocr_unavailable` *before* dispatching
-  to the worker. `OCRNever` with a nil engine proceeds normally.
+- If the parent's startup probe found no Tesseract install and the
+  request asks for `ocr=always` or `ocr=auto`, return 503 with
+  `code=ocr_unavailable` *before* spawning the child. `ocr=never`
+  proceeds normally regardless of OCR availability.
 
 ## Configuration
 
