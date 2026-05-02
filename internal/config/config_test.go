@@ -84,3 +84,60 @@ func TestLoadInvalidEnv(t *testing.T) {
 		})
 	}
 }
+
+func TestLoadOCRDefaults(t *testing.T) {
+	cfg, err := config.Load(map[string]string{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.OCREnabled {
+		t.Errorf("OCREnabled = false, want true (default)")
+	}
+	if cfg.OCRTextThreshold != 16 {
+		t.Errorf("OCRTextThreshold = %d, want 16", cfg.OCRTextThreshold)
+	}
+	if cfg.OCRDPI != 300 {
+		t.Errorf("OCRDPI = %v, want 300", cfg.OCRDPI)
+	}
+}
+
+func TestLoadOCREnvOverrides(t *testing.T) {
+	env := map[string]string{
+		"BI_OCR_ENABLED":   "false",
+		"BI_OCR_TESSDATA":  "/custom/tessdata",
+		"BI_OCR_THRESHOLD": "32",
+		"BI_OCR_DPI":       "200",
+	}
+	cfg, err := config.Load(env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.OCREnabled {
+		t.Errorf("OCREnabled = true, want false")
+	}
+	if cfg.OCRTessdataPath != "/custom/tessdata" {
+		t.Errorf("OCRTessdataPath = %q", cfg.OCRTessdataPath)
+	}
+	if cfg.OCRTextThreshold != 32 {
+		t.Errorf("OCRTextThreshold = %d", cfg.OCRTextThreshold)
+	}
+	if cfg.OCRDPI != 200 {
+		t.Errorf("OCRDPI = %v", cfg.OCRDPI)
+	}
+}
+
+func TestLoadOCRBadEnv(t *testing.T) {
+	for name, env := range map[string]map[string]string{
+		"threshold nan": {"BI_OCR_THRESHOLD": "abc"},
+		"threshold neg": {"BI_OCR_THRESHOLD": "-1"},
+		"dpi nan":       {"BI_OCR_DPI": "abc"},
+		"dpi zero":      {"BI_OCR_DPI": "0"},
+		"enabled bad":   {"BI_OCR_ENABLED": "maybe"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := config.Load(env); err == nil {
+				t.Fatal("want error")
+			}
+		})
+	}
+}
