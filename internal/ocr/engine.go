@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -105,4 +107,24 @@ func isSupported(code string) bool {
 		}
 	}
 	return false
+}
+
+// Probe verifies that tessdataDir contains the language packs
+// required at runtime. langs is the list of language codes (without
+// the .traineddata suffix); osd.traineddata is always required for
+// the "auto" detection path. Probe touches the filesystem only —
+// it does not initialise Tesseract, so it is safe to call from the
+// parent serve process which has no cgo dependency on Tesseract.
+func Probe(tessdataDir string, langs []string) error {
+	if tessdataDir == "" {
+		return fmt.Errorf("%w: empty tessdata path", ErrUnavailable)
+	}
+	required := append([]string{"osd"}, langs...)
+	for _, l := range required {
+		path := filepath.Join(tessdataDir, l+".traineddata")
+		if _, err := os.Stat(path); err != nil {
+			return fmt.Errorf("%w: %s", ErrUnavailable, err)
+		}
+	}
+	return nil
 }

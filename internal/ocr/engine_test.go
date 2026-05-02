@@ -3,6 +3,8 @@ package ocr
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -45,4 +47,37 @@ func TestErrSentinels(t *testing.T) {
 		t.Fatal("ErrUnavailable is not its own value")
 	}
 	_ = context.Background()
+}
+
+func TestProbeMissingTessdata(t *testing.T) {
+	dir := t.TempDir() // empty
+	if err := Probe(dir, SupportedLangs); err == nil {
+		t.Fatal("Probe on empty dir returned nil; want error")
+	}
+}
+
+func TestProbePresent(t *testing.T) {
+	dir := t.TempDir()
+	for _, l := range append([]string{"osd"}, SupportedLangs...) {
+		f := filepath.Join(dir, l+".traineddata")
+		if err := os.WriteFile(f, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := Probe(dir, SupportedLangs); err != nil {
+		t.Fatalf("Probe: %v", err)
+	}
+}
+
+func TestProbeMissingOSD(t *testing.T) {
+	dir := t.TempDir()
+	for _, l := range SupportedLangs { // no osd
+		f := filepath.Join(dir, l+".traineddata")
+		if err := os.WriteFile(f, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := Probe(dir, SupportedLangs); err == nil {
+		t.Fatal("Probe with no osd returned nil")
+	}
 }
