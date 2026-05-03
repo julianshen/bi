@@ -60,6 +60,8 @@ func runServe(_ []string) {
 		BinPath:      exe,
 		LOKPath:      cfg.LOKPath,
 		Timeout:      cfg.ConvertTimeout,
+		Workers:      cfg.Workers,
+		QueueDepth:   cfg.QueueDepth,
 		Metrics:      metrics,
 		OCRAvailable: ocrAvailable,
 	}

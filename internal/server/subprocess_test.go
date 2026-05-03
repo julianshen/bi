@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/julianshen/bi/internal/worker"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 // fakeBinScript writes a tiny shell script that mimics `bi convert` for
@@ -127,6 +128,285 @@ func TestSubprocessConverter_BinPathRequired(t *testing.T) {
 	if err == nil {
 		t.Fatal("want error for missing BinPath")
 	}
+}
+
+func TestSubprocessConverter_ReturnsQueueFullWhenLimitReached(t *testing.T) {
+	dir := t.TempDir()
+	started := filepath.Join(dir, "started")
+	release := filepath.Join(dir, "release")
+	bin := blockingPDFScript(t, started, release)
+
+	in := filepath.Join(dir, "in.docx")
+	if err := os.WriteFile(in, []byte("dummy"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c := &SubprocessConverter{
+		BinPath:    bin,
+		Timeout:    5 * time.Second,
+		Workers:    1,
+		QueueDepth: 0,
+	}
+
+	done := make(chan error, 1)
+	go func() {
+		res, err := c.Run(context.Background(), worker.Job{InPath: in, Format: worker.FormatPDF})
+		if res.OutPath != "" {
+			os.Remove(res.OutPath)
+		}
+		done <- err
+	}()
+
+	waitForFile(t, started)
+
+	_, err := c.Run(context.Background(), worker.Job{InPath: in, Format: worker.FormatPDF})
+	if !errors.Is(err, worker.ErrQueueFull) {
+		t.Fatalf("err = %v, want ErrQueueFull", err)
+	}
+
+	if err := os.WriteFile(release, []byte("ok"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-done; err != nil {
+		t.Fatalf("first conversion: %v", err)
+	}
+}
+
+func TestSubprocessConverter_QueueDepthAllowsOneWaitingRequest(t *testing.T) {
+	dir := t.TempDir()
+	started := filepath.Join(dir, "started")
+	release := filepath.Join(dir, "release")
+	bin := blockingPDFScript(t, started, release)
+
+	in := filepath.Join(dir, "in.docx")
+	if err := os.WriteFile(in, []byte("dummy"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c := &SubprocessConverter{
+		BinPath:    bin,
+		Timeout:    5 * time.Second,
+		Workers:    1,
+		QueueDepth: 1,
+	}
+
+	first := runPDFAsync(c, in)
+	waitForFile(t, started)
+
+	second := runPDFAsync(c, in)
+	waitForCondition(t, "second request admitted", func() bool {
+		return len(c.limit.admission) == 2
+	})
+
+	_, err := c.Run(context.Background(), worker.Job{InPath: in, Format: worker.FormatPDF})
+	if !errors.Is(err, worker.ErrQueueFull) {
+		t.Fatalf("third err = %v, want ErrQueueFull", err)
+	}
+
+	if err := os.WriteFile(release, []byte("ok"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-first; err != nil {
+		t.Fatalf("first conversion: %v", err)
+	}
+	if err := <-second; err != nil {
+		t.Fatalf("second conversion: %v", err)
+	}
+}
+
+func TestSubprocessConverter_TimeoutCoversQueueWait(t *testing.T) {
+	dir := t.TempDir()
+	bin := fakeBinScript(t, "convert_main() {\n"+parseArgs+`
+echo dummy-pdf-bytes > "$out"
+echo '{"mime":"application/pdf","total_pages":1}'
+}; shift; convert_main "$@"`)
+
+	in := filepath.Join(dir, "in.docx")
+	if err := os.WriteFile(in, []byte("dummy"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c := &SubprocessConverter{
+		BinPath:    bin,
+		Timeout:    50 * time.Millisecond,
+		Workers:    1,
+		QueueDepth: 1,
+	}
+
+	releaseFirst, err := c.acquire(context.Background(), worker.FormatPDF)
+	if err != nil {
+		t.Fatal(err)
+	}
+	released := false
+	defer func() {
+		if !released {
+			releaseFirst()
+		}
+	}()
+
+	errc := runPDFAsync(c, in)
+	select {
+	case err := <-errc:
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("queued err = %v, want DeadlineExceeded", err)
+		}
+	case <-time.After(300 * time.Millisecond):
+		releaseFirst()
+		released = true
+		err := <-errc
+		t.Fatalf("queued conversion did not time out while waiting; err after release = %v", err)
+	}
+}
+
+func TestSubprocessConverter_TimeoutKillsChild(t *testing.T) {
+	dir := t.TempDir()
+	bin := fakeBinScript(t, "convert_main() {\n"+parseArgs+`
+sleep 1
+}; shift; convert_main "$@"`)
+
+	in := filepath.Join(dir, "in.docx")
+	if err := os.WriteFile(in, []byte("dummy"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c := &SubprocessConverter{
+		BinPath: bin,
+		Timeout: 50 * time.Millisecond,
+		Workers: 1,
+	}
+
+	_, err := c.Run(context.Background(), worker.Job{InPath: in, Format: worker.FormatPDF})
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("err = %v, want DeadlineExceeded", err)
+	}
+}
+
+func TestSubprocessConverter_InstrumentsLimiterMetrics(t *testing.T) {
+	dir := t.TempDir()
+	started := filepath.Join(dir, "started")
+	release := filepath.Join(dir, "release")
+	bin := blockingPDFScript(t, started, release)
+
+	in := filepath.Join(dir, "in.docx")
+	if err := os.WriteFile(in, []byte("dummy"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	reg := prometheus.NewRegistry()
+	metrics := NewMetrics(reg)
+	c := &SubprocessConverter{
+		BinPath:    bin,
+		Timeout:    5 * time.Second,
+		Workers:    1,
+		QueueDepth: 1,
+		Metrics:    metrics,
+	}
+
+	first := runPDFAsync(c, in)
+	waitForFile(t, started)
+	waitForCondition(t, "busy metric", func() bool {
+		return gaugeValue(t, reg, "bi_worker_busy") == 1
+	})
+
+	second := runPDFAsync(c, in)
+	waitForCondition(t, "queue depth metric", func() bool {
+		return gaugeValue(t, reg, "bi_queue_depth") == 1
+	})
+
+	if err := os.WriteFile(release, []byte("ok"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-first; err != nil {
+		t.Fatalf("first conversion: %v", err)
+	}
+	if err := <-second; err != nil {
+		t.Fatalf("second conversion: %v", err)
+	}
+	if got := histogramSampleCount(t, reg, "bi_queue_wait_seconds"); got == 0 {
+		t.Fatal("queue wait histogram had no observations")
+	}
+	if got := gaugeValue(t, reg, "bi_worker_busy"); got != 0 {
+		t.Fatalf("busy metric after completion = %v, want 0", got)
+	}
+}
+
+func gaugeValue(t *testing.T, reg *prometheus.Registry, name string) float64 {
+	t.Helper()
+	families, err := reg.Gather()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, family := range families {
+		if family.GetName() != name {
+			continue
+		}
+		for _, metric := range family.GetMetric() {
+			if gauge := metric.GetGauge(); gauge != nil {
+				return gauge.GetValue()
+			}
+		}
+	}
+	return 0
+}
+
+func histogramSampleCount(t *testing.T, reg *prometheus.Registry, name string) uint64 {
+	t.Helper()
+	families, err := reg.Gather()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, family := range families {
+		if family.GetName() != name {
+			continue
+		}
+		var total uint64
+		for _, metric := range family.GetMetric() {
+			if hist := metric.GetHistogram(); hist != nil {
+				total += hist.GetSampleCount()
+			}
+		}
+		return total
+	}
+	return 0
+}
+
+func blockingPDFScript(t *testing.T, started, release string) string {
+	t.Helper()
+	return fakeBinScript(t, "convert_main() {\n"+parseArgs+`
+echo started >> "`+started+`"
+while [ ! -f "`+release+`" ]; do sleep 0.01; done
+echo dummy-pdf-bytes > "$out"
+echo '{"mime":"application/pdf","total_pages":1}'
+}; shift; convert_main "$@"`)
+}
+
+func runPDFAsync(c *SubprocessConverter, in string) <-chan error {
+	done := make(chan error, 1)
+	go func() {
+		res, err := c.Run(context.Background(), worker.Job{InPath: in, Format: worker.FormatPDF})
+		if res.OutPath != "" {
+			os.Remove(res.OutPath)
+		}
+		done <- err
+	}()
+	return done
+}
+
+func waitForFile(t *testing.T, path string) {
+	t.Helper()
+	waitForCondition(t, path, func() bool {
+		if _, err := os.Stat(path); err == nil {
+			return true
+		}
+		return false
+	})
+}
+
+func waitForCondition(t *testing.T, name string, ok func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if ok() {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for %s", name)
 }
 
 func TestSubprocessConverter_OutputTempPath(t *testing.T) {
