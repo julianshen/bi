@@ -51,7 +51,7 @@ func mapError(err error) problemMapping {
 		return problemMapping{"ocr-unavailable", "OCR not available", http.StatusServiceUnavailable}
 	case errors.Is(err, worker.ErrOCRFailed):
 		return problemMapping{"ocr-failed", "OCR pipeline failed", http.StatusBadGateway}
-	case errors.Is(err, worker.ErrPageOutOfRange), errors.Is(err, worker.ErrInvalidDPI):
+	case errors.Is(err, worker.ErrPageOutOfRange), errors.Is(err, worker.ErrInvalidDPI), errors.Is(err, worker.ErrPNGGridTooLarge):
 		return problemMapping{"bad-request", "Bad request", http.StatusBadRequest}
 	case errors.Is(err, ErrMissingContentType):
 		return problemMapping{"unsupported-media-type", "Content-Type required", http.StatusUnsupportedMediaType}

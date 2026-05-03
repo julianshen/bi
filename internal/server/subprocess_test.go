@@ -84,6 +84,7 @@ func TestSubprocessConverter_AllErrorMappings(t *testing.T) {
 		"lok-unsupported":      worker.ErrLOKUnsupported,
 		"page-out-of-range":    worker.ErrPageOutOfRange,
 		"invalid-dpi":          worker.ErrInvalidDPI,
+		"png-grid-too-large":   worker.ErrPNGGridTooLarge,
 		"markdown-pipeline":    worker.ErrMarkdownConversion,
 		"ocr-failed":           worker.ErrOCRFailed,
 		"ocr-unavailable":      worker.ErrOCRUnavailable,

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/julianshen/bi/internal/worker"
@@ -14,7 +15,7 @@ func TestBuildJobPNGPagesAndLayout(t *testing.T) {
 	if job.Format != worker.FormatPNG {
 		t.Fatalf("Format = %v, want FormatPNG", job.Format)
 	}
-	if got, want := job.Pages, []int{0, 2, 4}; !intSlicesEqual(got, want) {
+	if got, want := job.Pages, []int{0, 2, 4}; !slices.Equal(got, want) {
 		t.Fatalf("Pages = %v, want %v", got, want)
 	}
 	if job.GridCols != 2 || job.GridRows != 2 {
@@ -30,16 +31,4 @@ func TestBuildJobPNGRejectsLayoutWithoutPages(t *testing.T) {
 	if err == nil {
 		t.Fatal("want error")
 	}
-}
-
-func intSlicesEqual(a, b []int) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
 }

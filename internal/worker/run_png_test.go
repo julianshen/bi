@@ -3,11 +3,14 @@ package worker
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"errors"
+	"hash/crc32"
 	"image"
 	"image/color"
 	"image/png"
 	"os"
+	"slices"
 	"testing"
 	"time"
 )
@@ -96,7 +99,7 @@ func TestPoolRunPNGComposesSelectedPagesIntoGrid(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Remove(res.OutPath) })
 
-	if got, want := doc.renderCalls, []renderCall{{Page: 0, DPI: 1.25}, {Page: 2, DPI: 1.25}, {Page: 4, DPI: 1.25}}; !renderCallsEqual(got, want) {
+	if got, want := doc.renderCalls, []renderCall{{Page: 0, DPI: 1.25}, {Page: 2, DPI: 1.25}, {Page: 4, DPI: 1.25}}; !slices.Equal(got, want) {
 		t.Fatalf("render calls = %+v, want %+v", got, want)
 	}
 	got := decodePNGFile(t, res.OutPath)
@@ -107,6 +110,29 @@ func TestPoolRunPNGComposesSelectedPagesIntoGrid(t *testing.T) {
 	assertPixel(t, got, 2, 0, color.RGBA{G: 0xff, A: 0xff})
 	assertPixel(t, got, 0, 3, color.RGBA{B: 0xff, A: 0xff})
 	assertPixel(t, got, 2, 3, color.RGBA{R: 0xff, G: 0xff, B: 0xff, A: 0xff})
+}
+
+func TestPoolRunPNGRejectsOversizedGrid(t *testing.T) {
+	doc := &fakeDocument{
+		parts:       1,
+		renderBytes: pngWithConfig(t, 100_001, 1_000),
+	}
+	office := &fakeOffice{loadDoc: doc}
+	p, _ := newWithOffice(Config{Workers: 1, QueueDepth: 1, ConvertTimeout: time.Second}, office)
+	t.Cleanup(func() { _ = p.Close() })
+
+	in := tmpFile(t, "deck.pptx", []byte("x"))
+	_, err := p.Run(context.Background(), Job{
+		InPath:   in,
+		Format:   FormatPNG,
+		Pages:    []int{0},
+		GridCols: 1,
+		GridRows: 1,
+		DPI:      1,
+	})
+	if !errors.Is(err, ErrPNGGridTooLarge) {
+		t.Fatalf("err = %v, want ErrPNGGridTooLarge", err)
+	}
 }
 
 func solidPNG(t *testing.T, width, height int, c color.RGBA) []byte {
@@ -146,14 +172,25 @@ func assertPixel(t *testing.T, img image.Image, x, y int, want color.RGBA) {
 	}
 }
 
-func renderCallsEqual(a, b []renderCall) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
+func pngWithConfig(t *testing.T, width, height uint32) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	buf.Write([]byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'})
+	writePNGChunk(&buf, "IHDR", func() []byte {
+		data := make([]byte, 13)
+		binary.BigEndian.PutUint32(data[0:4], width)
+		binary.BigEndian.PutUint32(data[4:8], height)
+		data[8] = 8 // bit depth
+		data[9] = 2 // truecolor
+		return data
+	}())
+	writePNGChunk(&buf, "IEND", nil)
+	return buf.Bytes()
+}
+
+func writePNGChunk(buf *bytes.Buffer, typ string, data []byte) {
+	_ = binary.Write(buf, binary.BigEndian, uint32(len(data)))
+	chunk := append([]byte(typ), data...)
+	buf.Write(chunk)
+	_ = binary.Write(buf, binary.BigEndian, crc32.ChecksumIEEE(chunk))
 }

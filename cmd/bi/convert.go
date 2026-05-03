@@ -9,12 +9,12 @@ import (
 	"io"
 	"os"
 	"runtime"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/julianshen/bi/internal/config"
 	"github.com/julianshen/bi/internal/ocr"
+	"github.com/julianshen/bi/internal/pngopts"
 	"github.com/julianshen/bi/internal/worker"
 )
 
@@ -153,24 +153,25 @@ func buildJob(in, format string, page int, pagesFlag, layout string, dpi float64
 		job.Page = page
 		job.DPI = dpi
 		if pagesFlag != "" {
-			pages, err := parseConvertPageList(pagesFlag)
+			pages, err := pngopts.ParsePageList(pagesFlag)
 			if err != nil {
 				return job, fmt.Errorf("invalid -pages value %q", pagesFlag)
 			}
 			job.Pages = pages
 			if layout != "" {
-				cols, rows, err := parseConvertGridLayout(layout)
+				parsed, err := pngopts.ParseGridLayout(layout)
 				if err != nil {
 					return job, fmt.Errorf("invalid -layout value %q", layout)
 				}
-				if len(pages) > cols*rows {
+				if err := pngopts.ValidateLayout(len(pages), parsed); err != nil {
 					return job, fmt.Errorf("-layout %q has fewer cells than -pages", layout)
 				}
-				job.GridCols = cols
-				job.GridRows = rows
+				job.GridCols = parsed.Cols
+				job.GridRows = parsed.Rows
 			} else {
-				job.GridCols = len(pages)
-				job.GridRows = 1
+				parsed := pngopts.DefaultLayout(len(pages))
+				job.GridCols = parsed.Cols
+				job.GridRows = parsed.Rows
 			}
 		} else if layout != "" {
 			return job, errors.New("-layout requires -pages")
@@ -203,42 +204,6 @@ func buildJob(in, format string, page int, pagesFlag, layout string, dpi float64
 	return job, nil
 }
 
-func parseConvertPageList(v string) ([]int, error) {
-	parts := strings.Split(v, ",")
-	pages := make([]int, 0, len(parts))
-	for _, part := range parts {
-		part = strings.TrimSpace(part)
-		if part == "" {
-			return nil, strconv.ErrSyntax
-		}
-		page, err := strconv.Atoi(part)
-		if err != nil {
-			return nil, err
-		}
-		pages = append(pages, page)
-	}
-	return pages, nil
-}
-
-func parseConvertGridLayout(v string) (cols int, rows int, err error) {
-	parts := strings.Split(strings.ToLower(strings.TrimSpace(v)), "x")
-	if len(parts) != 2 {
-		return 0, 0, strconv.ErrSyntax
-	}
-	cols, err = strconv.Atoi(strings.TrimSpace(parts[0]))
-	if err != nil {
-		return 0, 0, err
-	}
-	rows, err = strconv.Atoi(strings.TrimSpace(parts[1]))
-	if err != nil {
-		return 0, 0, err
-	}
-	if cols <= 0 || rows <= 0 {
-		return 0, 0, strconv.ErrSyntax
-	}
-	return cols, rows, nil
-}
-
 // classifyConvertErr maps a worker error to a stable string the parent
 // process can switch on. The strings here are the contract between
 // `bi convert` (this file) and SubprocessConverter (server package).
@@ -256,6 +221,8 @@ func classifyConvertErr(err error) string {
 		return "page-out-of-range"
 	case errors.Is(err, worker.ErrInvalidDPI):
 		return "invalid-dpi"
+	case errors.Is(err, worker.ErrPNGGridTooLarge):
+		return "png-grid-too-large"
 	case errors.Is(err, worker.ErrMarkdownConversion):
 		return "markdown-pipeline"
 	case errors.Is(err, worker.ErrOCRFailed):

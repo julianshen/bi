@@ -3,6 +3,7 @@ package server_test
 import (
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
@@ -64,7 +65,7 @@ func TestPNGHandlerAcceptsSelectedPagesAndLayout(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
-	if got, want := conv.got.Pages, []int{0, 2, 4}; !intSlicesEqual(got, want) {
+	if got, want := conv.got.Pages, []int{0, 2, 4}; !slices.Equal(got, want) {
 		t.Fatalf("pages = %v, want %v", got, want)
 	}
 	if conv.got.GridCols != 2 || conv.got.GridRows != 2 {
@@ -91,7 +92,7 @@ func TestPNGHandlerDefaultsSelectedPagesToSingleRow(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
-	if got, want := conv.got.Pages, []int{1, 3, 5}; !intSlicesEqual(got, want) {
+	if got, want := conv.got.Pages, []int{1, 3, 5}; !slices.Equal(got, want) {
 		t.Fatalf("pages = %v, want %v", got, want)
 	}
 	if conv.got.GridCols != 3 || conv.got.GridRows != 1 {
@@ -202,16 +203,4 @@ func TestConvertPNGAcceptsPDFInput(t *testing.T) {
 	if conv.got.Format != worker.FormatPNG {
 		t.Errorf("dispatched job Format = %v, want FormatPNG", conv.got.Format)
 	}
-}
-
-func intSlicesEqual(a, b []int) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
 }

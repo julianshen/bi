@@ -48,6 +48,7 @@ func TestErrorKindTable(t *testing.T) {
 		{"lok-unsupported", ErrLOKUnsupported, "lok-unsupported"},
 		{"page-out-of-range", ErrPageOutOfRange, "page-out-of-range"},
 		{"invalid-dpi", ErrInvalidDPI, "invalid-dpi"},
+		{"png-grid-too-large", ErrPNGGridTooLarge, "png-grid-too-large"},
 		{"markdown-pipeline", ErrMarkdownConversion, "markdown-pipeline"},
 		{"internal", context.DeadlineExceeded, "internal"},
 	}

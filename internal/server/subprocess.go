@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/julianshen/bi/internal/pngopts"
 	"github.com/julianshen/bi/internal/worker"
 )
 
@@ -50,8 +51,15 @@ func buildSubprocessArgs(job worker.Job, outPath string, timeout time.Duration) 
 	if job.Format == worker.FormatPNG {
 		if len(job.Pages) > 0 {
 			args = append(args, "-pages", joinPages(job.Pages))
-			if job.GridCols > 0 && job.GridRows > 0 {
-				args = append(args, "-layout", strconv.Itoa(job.GridCols)+"x"+strconv.Itoa(job.GridRows))
+			layout := pngopts.Layout{Cols: job.GridCols, Rows: job.GridRows}
+			if layout.Cols <= 0 {
+				layout.Cols = len(job.Pages)
+			}
+			if layout.Rows <= 0 {
+				layout.Rows = (len(job.Pages) + layout.Cols - 1) / layout.Cols
+			}
+			if layout.Cols > 0 && layout.Rows > 0 {
+				args = append(args, "-layout", strconv.Itoa(layout.Cols)+"x"+strconv.Itoa(layout.Rows))
 			}
 		} else {
 			args = append(args, "-page", strconv.Itoa(job.Page))
@@ -255,6 +263,8 @@ func classifySubprocessErr(kind, detail string) error {
 		return wrap(worker.ErrPageOutOfRange, detail)
 	case "invalid-dpi":
 		return wrap(worker.ErrInvalidDPI, detail)
+	case "png-grid-too-large":
+		return wrap(worker.ErrPNGGridTooLarge, detail)
 	case "markdown-pipeline":
 		return wrap(worker.ErrMarkdownConversion, detail)
 	case "ocr-failed":
