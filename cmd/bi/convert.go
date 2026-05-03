@@ -14,6 +14,7 @@ import (
 
 	"github.com/julianshen/bi/internal/config"
 	"github.com/julianshen/bi/internal/ocr"
+	"github.com/julianshen/bi/internal/pngopts"
 	"github.com/julianshen/bi/internal/worker"
 )
 
@@ -32,6 +33,8 @@ func runConvert(args []string) {
 	out := fs.String("out", "", "output file path (required)")
 	format := fs.String("format", "", "pdf | png | markdown (required)")
 	page := fs.Int("page", 0, "page index (PNG only, 0-based)")
+	pages := fs.String("pages", "", "comma-separated page indexes (PNG only, 0-based)")
+	layout := fs.String("layout", "", "PNG page grid as columns x rows, e.g. 2x3")
 	dpi := fs.Float64("dpi", 1.0, "DPI scale (PNG only)")
 	password := fs.String("password", "", "document password (optional)")
 	images := fs.String("images", "embed", "embed | drop (markdown only)")
@@ -46,7 +49,7 @@ func runConvert(args []string) {
 		failConvert("bad-flags", errors.New("-in, -out, -format are required"))
 	}
 
-	job, err := buildJob(*in, *format, *page, *dpi, *password, *images, *marp, *ocrFlag, *ocrLang)
+	job, err := buildJob(*in, *format, *page, *pages, *layout, *dpi, *password, *images, *marp, *ocrFlag, *ocrLang)
 	if err != nil {
 		failConvert("bad-flags", err)
 	}
@@ -140,7 +143,7 @@ func runConvert(args []string) {
 // buildJob translates CLI flags into a worker.Job. Validation that's local
 // to this binary lives here; semantic validation (page range, dpi range)
 // happens inside worker.Run.
-func buildJob(in, format string, page int, dpi float64, password, images string, marp bool, ocrMode, ocrLang string) (worker.Job, error) {
+func buildJob(in, format string, page int, pagesFlag, layout string, dpi float64, password, images string, marp bool, ocrMode, ocrLang string) (worker.Job, error) {
 	job := worker.Job{InPath: in, Password: password}
 	switch strings.ToLower(format) {
 	case "pdf":
@@ -149,6 +152,30 @@ func buildJob(in, format string, page int, dpi float64, password, images string,
 		job.Format = worker.FormatPNG
 		job.Page = page
 		job.DPI = dpi
+		if pagesFlag != "" {
+			pages, err := pngopts.ParsePageList(pagesFlag)
+			if err != nil {
+				return job, fmt.Errorf("invalid -pages value %q", pagesFlag)
+			}
+			job.Pages = pages
+			if layout != "" {
+				parsed, err := pngopts.ParseGridLayout(layout)
+				if err != nil {
+					return job, fmt.Errorf("invalid -layout value %q", layout)
+				}
+				if err := pngopts.ValidateLayout(len(pages), parsed); err != nil {
+					return job, fmt.Errorf("-layout %q has fewer cells than -pages", layout)
+				}
+				job.GridCols = parsed.Cols
+				job.GridRows = parsed.Rows
+			} else {
+				parsed := pngopts.DefaultLayout(len(pages))
+				job.GridCols = parsed.Cols
+				job.GridRows = parsed.Rows
+			}
+		} else if layout != "" {
+			return job, errors.New("-layout requires -pages")
+		}
 	case "markdown", "md":
 		job.Format = worker.FormatMarkdown
 		switch images {
@@ -194,6 +221,8 @@ func classifyConvertErr(err error) string {
 		return "page-out-of-range"
 	case errors.Is(err, worker.ErrInvalidDPI):
 		return "invalid-dpi"
+	case errors.Is(err, worker.ErrPNGGridTooLarge):
+		return "png-grid-too-large"
 	case errors.Is(err, worker.ErrMarkdownConversion):
 		return "markdown-pipeline"
 	case errors.Is(err, worker.ErrOCRFailed):

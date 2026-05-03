@@ -29,6 +29,7 @@ func TestWriteProblemFromError(t *testing.T) {
 		{"lok unsupported", worker.ErrLOKUnsupported, "lok-unsupported", 501},
 		{"page out of range", worker.ErrPageOutOfRange, "bad-request", 400},
 		{"invalid dpi", worker.ErrInvalidDPI, "bad-request", 400},
+		{"png grid too large", worker.ErrPNGGridTooLarge, "bad-request", 400},
 		{"deadline", context.DeadlineExceeded, "timeout", 504},
 		{"unknown", errors.New("unexpected"), "internal", 500},
 		{"ocr unavailable", worker.ErrOCRUnavailable, "ocr-unavailable", 503},

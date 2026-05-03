@@ -48,6 +48,9 @@ func ErrorKind(err error) string {
 	if errors.Is(err, ErrInvalidDPI) {
 		return "invalid-dpi"
 	}
+	if errors.Is(err, ErrPNGGridTooLarge) {
+		return "png-grid-too-large"
+	}
 	if errors.Is(err, ErrMarkdownConversion) {
 		return "markdown-pipeline"
 	}
@@ -101,6 +104,7 @@ func Classify(err error) error {
 }
 
 var (
-	ErrPageOutOfRange = errors.New("worker: page out of range")
-	ErrInvalidDPI     = errors.New("worker: invalid dpi")
+	ErrPageOutOfRange  = errors.New("worker: page out of range")
+	ErrInvalidDPI      = errors.New("worker: invalid dpi")
+	ErrPNGGridTooLarge = errors.New("worker: png grid too large")
 )

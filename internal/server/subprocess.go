@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/julianshen/bi/internal/pngopts"
 	"github.com/julianshen/bi/internal/worker"
 )
 
@@ -24,7 +25,7 @@ import (
 // crashes on POSTed documents while it works fine in a one-shot CLI.
 //
 // The contract with `cmd/bi/convert.go`:
-//   - flags: -in, -out, -format, -page, -dpi, -password, -images, -marp, -ocr, -ocr-lang, -timeout
+//   - flags: -in, -out, -format, -page, -pages, -layout, -dpi, -password, -images, -marp, -ocr, -ocr-lang, -timeout
 //   - success: exit 0, last stdout line is JSON {"mime":"...","total_pages":N}
 //   - failure: exit non-zero, last stdout line is JSON {"error":"...","detail":"..."}
 //   - the error string maps back to a worker sentinel via classifySubprocessErr.
@@ -48,8 +49,22 @@ func buildSubprocessArgs(job worker.Job, outPath string, timeout time.Duration) 
 		"-format", job.Format.String(),
 	}
 	if job.Format == worker.FormatPNG {
-		args = append(args, "-page", strconv.Itoa(job.Page),
-			"-dpi", strconv.FormatFloat(job.DPI, 'f', -1, 64))
+		if len(job.Pages) > 0 {
+			args = append(args, "-pages", joinPages(job.Pages))
+			layout := pngopts.Layout{Cols: job.GridCols, Rows: job.GridRows}
+			if layout.Cols <= 0 {
+				layout.Cols = len(job.Pages)
+			}
+			if layout.Rows <= 0 {
+				layout.Rows = (len(job.Pages) + layout.Cols - 1) / layout.Cols
+			}
+			if layout.Cols > 0 && layout.Rows > 0 {
+				args = append(args, "-layout", strconv.Itoa(layout.Cols)+"x"+strconv.Itoa(layout.Rows))
+			}
+		} else {
+			args = append(args, "-page", strconv.Itoa(job.Page))
+		}
+		args = append(args, "-dpi", strconv.FormatFloat(job.DPI, 'f', -1, 64))
 	}
 	if job.Password != "" {
 		args = append(args, "-password", job.Password)
@@ -85,6 +100,17 @@ func buildSubprocessArgs(job worker.Job, outPath string, timeout time.Duration) 
 		args = append(args, "-timeout", timeout.String())
 	}
 	return args
+}
+
+func joinPages(pages []int) string {
+	var b strings.Builder
+	for i, page := range pages {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		b.WriteString(strconv.Itoa(page))
+	}
+	return b.String()
 }
 
 // Run spawns `bi convert ...`, waits for it, and translates the child's
@@ -237,6 +263,8 @@ func classifySubprocessErr(kind, detail string) error {
 		return wrap(worker.ErrPageOutOfRange, detail)
 	case "invalid-dpi":
 		return wrap(worker.ErrInvalidDPI, detail)
+	case "png-grid-too-large":
+		return wrap(worker.ErrPNGGridTooLarge, detail)
 	case "markdown-pipeline":
 		return wrap(worker.ErrMarkdownConversion, detail)
 	case "ocr-failed":
