@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -34,8 +35,18 @@ type SubprocessConverter struct {
 	LOKPath      string        // forwarded as $LOK_PATH to the child
 	TmpDir       string        // where to stage output files; empty = system default
 	Timeout      time.Duration // per-conversion ceiling; child also enforces this
+	Workers      int           // max concurrent child conversions; <=0 disables parent-side limiting
+	QueueDepth   int           // extra admitted requests waiting for a worker
 	Metrics      *Metrics      // optional; observed for conversion duration and LOK errors
 	OCRAvailable bool          // mirrors Deps.OCRAvailable; informational, set by serve at boot
+
+	limitOnce sync.Once
+	limit     subprocessLimiter
+}
+
+type subprocessLimiter struct {
+	admission chan struct{}
+	workers   chan struct{}
 }
 
 // buildSubprocessArgs constructs the argv for `bi convert` from a
@@ -119,6 +130,18 @@ func (s *SubprocessConverter) Run(ctx context.Context, job worker.Job) (worker.R
 	if s.BinPath == "" {
 		return worker.Result{}, errors.New("subprocess: BinPath not set")
 	}
+	runCtx := ctx
+	cancel := func() {}
+	if s.Timeout > 0 {
+		runCtx, cancel = context.WithTimeout(ctx, s.Timeout)
+	}
+	defer cancel()
+
+	release, err := s.acquire(runCtx, job.Format)
+	if err != nil {
+		return worker.Result{}, err
+	}
+	defer release()
 
 	start := time.Now()
 	outPath, err := outputTempPath(s.TmpDir, job.Format)
@@ -142,7 +165,7 @@ func (s *SubprocessConverter) Run(ctx context.Context, job worker.Job) (worker.R
 	}
 	defer os.RemoveAll(procTmp)
 
-	cmd := exec.CommandContext(ctx, s.BinPath, args...)
+	cmd := exec.CommandContext(runCtx, s.BinPath, args...)
 	cmd.Env = append(os.Environ(),
 		"LOK_PATH="+s.LOKPath,
 		"TMPDIR="+procTmp,
@@ -155,6 +178,17 @@ func (s *SubprocessConverter) Run(ctx context.Context, job worker.Job) (worker.R
 	// generic "Unspecified Application Error". A new session resets
 	// process-group state and lets LO install its own handlers cleanly.
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	cmd.Cancel = func() error {
+		if cmd.Process == nil {
+			return os.ErrProcessDone
+		}
+		err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		if errors.Is(err, syscall.ESRCH) {
+			return os.ErrProcessDone
+		}
+		return err
+	}
+	cmd.WaitDelay = 5 * time.Second
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -171,6 +205,9 @@ func (s *SubprocessConverter) Run(ctx context.Context, job worker.Job) (worker.R
 	envelope, parseErr := lastJSONLine(stdout.Bytes())
 	if parseErr != nil {
 		os.Remove(outPath)
+		if runCtx.Err() != nil {
+			return worker.Result{}, runCtx.Err()
+		}
 		return worker.Result{}, fmt.Errorf("subprocess: parse output (run err=%v, stderr=%q): %w",
 			runErr, trim(stderr.Bytes(), 256), parseErr)
 	}
@@ -189,8 +226,8 @@ func (s *SubprocessConverter) Run(ctx context.Context, job worker.Job) (worker.R
 		}
 		// No structured error — child exited abnormally without printing
 		// the envelope (likely a crash). Surface stderr.
-		if ctx.Err() != nil {
-			return worker.Result{}, ctx.Err()
+		if runCtx.Err() != nil {
+			return worker.Result{}, runCtx.Err()
 		}
 		return worker.Result{}, fmt.Errorf("subprocess: %w (stderr=%q)",
 			runErr, trim(stderr.Bytes(), 512))
@@ -201,6 +238,73 @@ func (s *SubprocessConverter) Run(ctx context.Context, job worker.Job) (worker.R
 		MIME:       envelope.MIME,
 		TotalPages: envelope.TotalPages,
 	}, nil
+}
+
+func (s *SubprocessConverter) acquire(ctx context.Context, format worker.Format) (func(), error) {
+	if s.Workers <= 0 {
+		return func() {}, nil
+	}
+	s.limitOnce.Do(func() {
+		queueDepth := s.QueueDepth
+		if queueDepth < 0 {
+			queueDepth = 0
+		}
+		s.limit = subprocessLimiter{
+			admission: make(chan struct{}, s.Workers+queueDepth),
+			workers:   make(chan struct{}, s.Workers),
+		}
+	})
+
+	select {
+	case s.limit.admission <- struct{}{}:
+		s.observeQueueDepth()
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+		return nil, worker.ErrQueueFull
+	}
+
+	acquiredWorker := false
+	release := func() {
+		if acquiredWorker {
+			if s.Metrics != nil {
+				s.Metrics.WorkerBusy(-1)
+			}
+			<-s.limit.workers
+		}
+		<-s.limit.admission
+		s.observeQueueDepth()
+	}
+
+	waitStart := time.Now()
+	select {
+	case s.limit.workers <- struct{}{}:
+		acquiredWorker = true
+		queueWait := time.Since(waitStart)
+		if s.Metrics != nil {
+			s.Metrics.WorkerBusy(1)
+			s.Metrics.QueueWait(format, queueWait)
+		}
+		s.observeQueueDepth()
+		if t := worker.TimingFrom(ctx); t != nil {
+			t.QueueWaitMs = queueWait.Milliseconds()
+		}
+		return release, nil
+	case <-ctx.Done():
+		release()
+		return nil, ctx.Err()
+	}
+}
+
+func (s *SubprocessConverter) observeQueueDepth() {
+	if s.Metrics == nil || s.Workers <= 0 {
+		return
+	}
+	depth := len(s.limit.admission) - len(s.limit.workers)
+	if depth < 0 {
+		depth = 0
+	}
+	s.Metrics.QueueDepth(depth)
 }
 
 type subprocessEnvelope struct {
