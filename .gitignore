@@ -9,6 +9,8 @@ coverage.html
 *.test         # Go test binaries — Dockerfile.test is exempted via !
 !Dockerfile.test
 *.prof
+.gocache/
+results/evaluation-*/
 
 # Editor / OS
 .idea/
