@@ -29,16 +29,22 @@ func (f *fakeOffice) Load(path, password string) (lokDocument, error) {
 func (f *fakeOffice) Close() error { f.closeCalls++; return f.closeErr }
 
 type fakeDocument struct {
-	parts       int
-	saveAsCalls []saveAsCall
-	saveAsErr   error
-	saveAsHook  func(path, filter, options string) error // optional, runs after recording
-	renderErr   error
-	renderBytes []byte
-	closeCalls  int
+	parts        int
+	saveAsCalls  []saveAsCall
+	saveAsErr    error
+	saveAsHook   func(path, filter, options string) error // optional, runs after recording
+	renderErr    error
+	renderBytes  []byte
+	renderByPage map[int][]byte
+	renderCalls  []renderCall
+	closeCalls   int
 }
 
 type saveAsCall struct{ Path, Filter, Options string }
+type renderCall struct {
+	Page int
+	DPI  float64
+}
 
 func (f *fakeDocument) SaveAs(path, filter, options string) error {
 	f.saveAsCalls = append(f.saveAsCalls, saveAsCall{path, filter, options})
@@ -52,8 +58,14 @@ func (f *fakeDocument) SaveAs(path, filter, options string) error {
 }
 func (f *fakeDocument) InitializeForRendering(arg string) error { return nil }
 func (f *fakeDocument) RenderPagePNG(page int, dpi float64) ([]byte, error) {
+	f.renderCalls = append(f.renderCalls, renderCall{Page: page, DPI: dpi})
 	if f.renderErr != nil {
 		return nil, f.renderErr
+	}
+	if f.renderByPage != nil {
+		if b, ok := f.renderByPage[page]; ok {
+			return b, nil
+		}
 	}
 	if f.renderBytes != nil {
 		return f.renderBytes, nil

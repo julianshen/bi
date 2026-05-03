@@ -24,7 +24,7 @@ import (
 // crashes on POSTed documents while it works fine in a one-shot CLI.
 //
 // The contract with `cmd/bi/convert.go`:
-//   - flags: -in, -out, -format, -page, -dpi, -password, -images, -marp, -ocr, -ocr-lang, -timeout
+//   - flags: -in, -out, -format, -page, -pages, -layout, -dpi, -password, -images, -marp, -ocr, -ocr-lang, -timeout
 //   - success: exit 0, last stdout line is JSON {"mime":"...","total_pages":N}
 //   - failure: exit non-zero, last stdout line is JSON {"error":"...","detail":"..."}
 //   - the error string maps back to a worker sentinel via classifySubprocessErr.
@@ -48,8 +48,15 @@ func buildSubprocessArgs(job worker.Job, outPath string, timeout time.Duration) 
 		"-format", job.Format.String(),
 	}
 	if job.Format == worker.FormatPNG {
-		args = append(args, "-page", strconv.Itoa(job.Page),
-			"-dpi", strconv.FormatFloat(job.DPI, 'f', -1, 64))
+		if len(job.Pages) > 0 {
+			args = append(args, "-pages", joinPages(job.Pages))
+			if job.GridCols > 0 && job.GridRows > 0 {
+				args = append(args, "-layout", strconv.Itoa(job.GridCols)+"x"+strconv.Itoa(job.GridRows))
+			}
+		} else {
+			args = append(args, "-page", strconv.Itoa(job.Page))
+		}
+		args = append(args, "-dpi", strconv.FormatFloat(job.DPI, 'f', -1, 64))
 	}
 	if job.Password != "" {
 		args = append(args, "-password", job.Password)
@@ -85,6 +92,17 @@ func buildSubprocessArgs(job worker.Job, outPath string, timeout time.Duration) 
 		args = append(args, "-timeout", timeout.String())
 	}
 	return args
+}
+
+func joinPages(pages []int) string {
+	var b strings.Builder
+	for i, page := range pages {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		b.WriteString(strconv.Itoa(page))
+	}
+	return b.String()
 }
 
 // Run spawns `bi convert ...`, waits for it, and translates the child's

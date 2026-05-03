@@ -79,6 +79,9 @@ type Job struct {
 	InPath         string // path to a temp file already on disk
 	Format         Format
 	Page           int               // 0-based; PNG only
+	Pages          []int             // 0-based selected pages; PNG only; empty means Page
+	GridCols       int               // PNG multi-page layout columns; 0 means default
+	GridRows       int               // PNG multi-page layout rows; 0 means default
 	DPI            float64           // PNG only
 	Password       string            // empty if not encrypted
 	MarkdownImages MarkdownImageMode // markdown only

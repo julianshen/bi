@@ -309,3 +309,29 @@ echo '{"mime":"image/png","total_pages":7}'
 		t.Errorf("TotalPages = %d, want 7", res.TotalPages)
 	}
 }
+
+func TestBuildSubprocessArgsForwardsPNGPagesAndLayout(t *testing.T) {
+	args := buildSubprocessArgs(worker.Job{
+		Format:   worker.FormatPNG,
+		InPath:   "/tmp/in.pptx",
+		Pages:    []int{0, 2, 4},
+		GridCols: 2,
+		GridRows: 2,
+		DPI:      1.5,
+	}, "/tmp/out.png", 5*time.Second)
+
+	for _, p := range [][2]string{
+		{"-pages", "0,2,4"},
+		{"-layout", "2x2"},
+		{"-dpi", "1.5"},
+	} {
+		if !argHasPair(args, p[0], p[1]) {
+			t.Errorf("missing %v in args=%v", p, args)
+		}
+	}
+	for _, a := range args {
+		if a == "-page" {
+			t.Fatalf("unexpected -page in multi-page args=%v", args)
+		}
+	}
+}

@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -32,6 +33,8 @@ func runConvert(args []string) {
 	out := fs.String("out", "", "output file path (required)")
 	format := fs.String("format", "", "pdf | png | markdown (required)")
 	page := fs.Int("page", 0, "page index (PNG only, 0-based)")
+	pages := fs.String("pages", "", "comma-separated page indexes (PNG only, 0-based)")
+	layout := fs.String("layout", "", "PNG page grid as columns x rows, e.g. 2x3")
 	dpi := fs.Float64("dpi", 1.0, "DPI scale (PNG only)")
 	password := fs.String("password", "", "document password (optional)")
 	images := fs.String("images", "embed", "embed | drop (markdown only)")
@@ -46,7 +49,7 @@ func runConvert(args []string) {
 		failConvert("bad-flags", errors.New("-in, -out, -format are required"))
 	}
 
-	job, err := buildJob(*in, *format, *page, *dpi, *password, *images, *marp, *ocrFlag, *ocrLang)
+	job, err := buildJob(*in, *format, *page, *pages, *layout, *dpi, *password, *images, *marp, *ocrFlag, *ocrLang)
 	if err != nil {
 		failConvert("bad-flags", err)
 	}
@@ -140,7 +143,7 @@ func runConvert(args []string) {
 // buildJob translates CLI flags into a worker.Job. Validation that's local
 // to this binary lives here; semantic validation (page range, dpi range)
 // happens inside worker.Run.
-func buildJob(in, format string, page int, dpi float64, password, images string, marp bool, ocrMode, ocrLang string) (worker.Job, error) {
+func buildJob(in, format string, page int, pagesFlag, layout string, dpi float64, password, images string, marp bool, ocrMode, ocrLang string) (worker.Job, error) {
 	job := worker.Job{InPath: in, Password: password}
 	switch strings.ToLower(format) {
 	case "pdf":
@@ -149,6 +152,29 @@ func buildJob(in, format string, page int, dpi float64, password, images string,
 		job.Format = worker.FormatPNG
 		job.Page = page
 		job.DPI = dpi
+		if pagesFlag != "" {
+			pages, err := parseConvertPageList(pagesFlag)
+			if err != nil {
+				return job, fmt.Errorf("invalid -pages value %q", pagesFlag)
+			}
+			job.Pages = pages
+			if layout != "" {
+				cols, rows, err := parseConvertGridLayout(layout)
+				if err != nil {
+					return job, fmt.Errorf("invalid -layout value %q", layout)
+				}
+				if len(pages) > cols*rows {
+					return job, fmt.Errorf("-layout %q has fewer cells than -pages", layout)
+				}
+				job.GridCols = cols
+				job.GridRows = rows
+			} else {
+				job.GridCols = len(pages)
+				job.GridRows = 1
+			}
+		} else if layout != "" {
+			return job, errors.New("-layout requires -pages")
+		}
 	case "markdown", "md":
 		job.Format = worker.FormatMarkdown
 		switch images {
@@ -175,6 +201,42 @@ func buildJob(in, format string, page int, dpi float64, password, images string,
 		return job, fmt.Errorf("invalid -format value %q", format)
 	}
 	return job, nil
+}
+
+func parseConvertPageList(v string) ([]int, error) {
+	parts := strings.Split(v, ",")
+	pages := make([]int, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			return nil, strconv.ErrSyntax
+		}
+		page, err := strconv.Atoi(part)
+		if err != nil {
+			return nil, err
+		}
+		pages = append(pages, page)
+	}
+	return pages, nil
+}
+
+func parseConvertGridLayout(v string) (cols int, rows int, err error) {
+	parts := strings.Split(strings.ToLower(strings.TrimSpace(v)), "x")
+	if len(parts) != 2 {
+		return 0, 0, strconv.ErrSyntax
+	}
+	cols, err = strconv.Atoi(strings.TrimSpace(parts[0]))
+	if err != nil {
+		return 0, 0, err
+	}
+	rows, err = strconv.Atoi(strings.TrimSpace(parts[1]))
+	if err != nil {
+		return 0, 0, err
+	}
+	if cols <= 0 || rows <= 0 {
+		return 0, 0, strconv.ErrSyntax
+	}
+	return cols, rows, nil
 }
 
 // classifyConvertErr maps a worker error to a stable string the parent
