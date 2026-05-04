@@ -65,15 +65,67 @@ make cover-gate
 
 By default, the service listens on `:8080` and exposes conversion endpoints under `/v1`.
 
-### Authentication
+## HTTP API reference
 
-If `BI_API_TOKEN` is set, pass it as a bearer token:
+Base URL: `http://localhost:8080`.
 
-```bash
--H "Authorization: Bearer $BI_API_TOKEN"
-```
+All conversion endpoints are `POST` and require a request body containing the source file bytes.
 
-If `BI_API_TOKEN` is not set, conversion endpoints are unauthenticated. In the examples below, omit the `Authorization` header when auth is disabled.
+### Auth
+
+- When `BI_API_TOKEN` is set, send `Authorization: Bearer <token>`.
+- When `BI_API_TOKEN` is unset, conversion endpoints are public.
+
+### Endpoints
+
+| Method | Path | Description | Success response |
+|---|---|---|---|
+| `GET` | `/healthz` | Liveness probe. | `200 text/plain` |
+| `GET` | `/readyz` | Readiness probe (includes conversion sanity check cache). | `200 text/plain` |
+| `GET` | `/metrics` | Prometheus metrics endpoint. | `200 text/plain` |
+| `POST` | `/v1/convert/pdf` | Convert office document to PDF. | `200 application/pdf` |
+| `POST` | `/v1/convert/png` | Render one page or page grid as PNG. | `200 image/png` |
+| `POST` | `/v1/thumbnail` | Generate thumbnail PNG (same options as PNG with lower default DPI). | `200 image/png` |
+| `POST` | `/v1/convert/markdown` | Convert document to Markdown (optional OCR and image mode controls). | `200 text/markdown` |
+
+### Common request headers (conversion endpoints)
+
+- `Content-Type` (required): MIME type of uploaded input document.
+- `Authorization` (required only if `BI_API_TOKEN` is configured): `Bearer <token>`.
+- `X-Bi-Password` (optional): password for encrypted files.
+- `X-Bi-Request-Id` (optional): caller-provided request ID.
+
+### Common response headers (conversion endpoints)
+
+- `X-Bi-Request-Id`: request correlation ID.
+- `X-Total-Pages`: total source pages when known.
+- `Content-Type`, `Content-Length`: output format and size.
+
+### Query parameters
+
+#### `POST /v1/convert/png` and `POST /v1/thumbnail`
+
+- `page` (optional, integer): 1-based single page to render.
+- `pages` (optional, list/ranges): multiple pages, e.g. `1,3-5`.
+- `layout` (optional, requires `pages`): grid, e.g. `2x2`.
+- `dpi` (optional, float `0.1` to `4.0`): render scale.
+  - Default for `/v1/convert/png`: `1.0`
+  - Default for `/v1/thumbnail`: `0.5`
+
+`page` and `pages` are mutually exclusive.
+
+#### `POST /v1/convert/markdown`
+
+- `images` (optional): `embed` (default) or `drop`.
+- `ocr` (optional): `auto` (default), `always`, or `never`.
+- `ocr_lang` (optional): Tesseract language(s), default `auto`.
+
+### Error behavior
+
+- Invalid query parameter values return a Problem JSON error (`400`).
+- Missing `Content-Type` returns an error (`400`).
+- Auth failures return `401` when token auth is enabled.
+- OCR-required requests can return `503` when OCR runtime is unavailable.
 
 ### Health and metrics
 
